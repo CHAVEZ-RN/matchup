@@ -129,7 +129,7 @@ function Login({ onIn }) {
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="coach@matchup.ph"
             style={{ width: "100%", boxSizing: "border-box", marginTop: 6, marginBottom: 16, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 10, padding: "13px 14px", color: T.text, fontSize: 14, outline: "none" }} />
           <label style={{ color: T.dim, fontSize: 12, fontWeight: 600 }}>PASSWORD</label>
-          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••"
             style={{ width: "100%", boxSizing: "border-box", marginTop: 6, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 10, padding: "13px 14px", color: T.text, fontSize: 14, outline: "none" }} />
           <button onClick={onIn} style={{
             width: "100%", marginTop: 22, background: `linear-gradient(180deg, ${T.gold}, #B8902C)`,
@@ -263,7 +263,7 @@ function Pending({ bookings, blocked, gBlocked, act, simulate }) {
               </div>
             )}
             <div style={{ marginTop: 12, color: `${T.dim}AA`, fontSize: 11, textAlign: "center" }}>
-              \u2190 swipe left to decline · swipe right to approve \u2192
+              ← swipe left to decline · swipe right to approve →
             </div>
           </SwipeCard>
         );
