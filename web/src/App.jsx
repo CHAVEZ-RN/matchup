@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CalendarDays, Inbox, ListChecks, Check, X, Lock, Send, Search,
   Clock, BadgeCheck, CircleDot, History, Sparkles, LogOut, Ban,
-  AlertTriangle, Undo2
+  AlertTriangle, Undo2, Globe, CalendarClock
 } from "lucide-react";
 
-/* ───────────────────────── DESIGN TOKENS ───────────────────────── */
+/* ----------------------- DESIGN TOKENS ----------------------- */
 const T = {
   bg: "#0E0C09",
   panel: "#17140F",
@@ -18,7 +18,10 @@ const T = {
   green: "#7FBE8E",
   red: "#D77A6A",
   blue: "#8FA8C9",
+  purple: "#B49AE8",
 };
+
+const SPORT = "Tennis"; // single-sport coach (demo assumption)
 
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Inter:wght@400;500;600;700&display=swap');
@@ -31,7 +34,7 @@ const FONTS = `
 input::placeholder { color: #9C918077; }
 `;
 
-/* ───────────────────────── DATA HELPERS ───────────────────────── */
+/* ----------------------- DATA HELPERS ----------------------- */
 const d = (offset) => {
   const x = new Date();
   x.setDate(x.getDate() + offset);
@@ -54,19 +57,19 @@ const fmt12 = (t) => {
 const HOURS = Array.from({ length: 16 }, (_, i) => `${String(i + 6).padStart(2, "0")}:00`);
 
 const SEED = [
-  { id: 1, client: "Andrea Reyes",  date: d(0), time: "07:00", dur: 1, status: "active",    via: "Machi",  note: "Tennis · fundamentals" },
-  { id: 2, client: "JM dela Cruz",  date: d(0), time: "16:00", dur: 1, status: "upcoming",  via: "Machi",  note: "Basketball · shooting drills" },
-  { id: 3, client: "Miguel Santos", date: d(1), time: "09:00", dur: 2, status: "pending",   via: "Machi",  note: "“pwede po ba sat 9am, 2 hrs?”" },
-  { id: 4, client: "Kayla Lim",     date: d(0), time: "16:00", dur: 1, status: "pending",   via: "Machi",  note: "“gusto ko sana 4pm po today”" },
-  { id: 5, client: "Paolo Garcia",  date: d(-1), time: "08:00", dur: 1, status: "completed", via: "Machi",  note: "Tennis · footwork" },
-  { id: 6, client: "Bea Tan",       date: d(-3), time: "17:00", dur: 1, status: "completed", via: "Manual", note: "Strength & conditioning" },
-  { id: 7, client: "Carlos Uy",     date: d(3), time: "10:00", dur: 1, status: "upcoming",  via: "Machi",  note: "First session" },
+  { id: 1, client: "Andrea Reyes",  date: d(0), time: "07:00", dur: 1, status: "active",    via: "Machi",  note: `${SPORT} · fundamentals` },
+  { id: 2, client: "JM dela Cruz",  date: d(0), time: "16:00", dur: 1, status: "upcoming",  via: "Machi",  note: `${SPORT} · serve drills` },
+  { id: 3, client: "Miguel Santos", date: d(1), time: "09:00", dur: 2, status: "pending",   via: "Machi",  note: "\u201cpwede po ba sat 9am, 2 hrs?\u201d" },
+  { id: 4, client: "Kayla Lim",     date: d(0), time: "16:00", dur: 1, status: "pending",   via: "Machi",  note: "\u201cgusto ko sana 4pm po today\u201d" },
+  { id: 5, client: "Paolo Garcia",  date: d(-1), time: "08:00", dur: 1, status: "completed", via: "Machi",  note: `${SPORT} · footwork` },
+  { id: 6, client: "Bea Tan",       date: d(-3), time: "17:00", dur: 1, status: "completed", via: "Manual", note: `${SPORT} · conditioning` },
+  { id: 7, client: "Carlos Uy",     date: d(3), time: "10:00", dur: 1, status: "upcoming",  via: "Machi",  note: `${SPORT} · first session` },
 ];
 
 const NEW_REQUESTS = [
-  { client: "Trisha Mendoza", note: "“hi po! free pa po ba bukas morning?”", time: "08:00", dOff: 1 },
-  { client: "Ken Villanueva", note: "“coach pa-book ng sunday 4pm 🙏”", time: "16:00", dOff: 4 },
-  { client: "Liza Fernandez", note: "“2 hours sana, weekend po”", time: "14:00", dOff: 5 },
+  { client: "Trisha Mendoza", note: "\u201chi po! free pa po ba bukas morning?\u201d", time: "08:00", dOff: 1 },
+  { client: "Ken Villanueva", note: "\u201ccoach pa-book ng sunday 4pm \ud83d\ude4f\u201d", time: "16:00", dOff: 4 },
+  { client: "Liza Fernandez", note: "\u201c2 hours sana, weekend po\u201d", time: "14:00", dOff: 5 },
 ];
 
 const overlaps = (a, b) => {
@@ -76,13 +79,13 @@ const overlaps = (a, b) => {
   return a1 < b2 && b1 < a2;
 };
 
-/* ───────────────────────── SMALL PARTS ───────────────────────── */
+/* ----------------------- SMALL PARTS ----------------------- */
 const STATUS_STYLE = {
-  pending:   { c: T.gold,  label: "Pending" },
-  upcoming:  { c: T.blue,  label: "Upcoming" },
-  active:    { c: T.green, label: "Active" },
-  completed: { c: T.dim,   label: "Completed" },
-  declined:  { c: T.red,   label: "Declined" },
+  pending:   { c: T.gold,   label: "Pending" },
+  upcoming:  { c: T.blue,   label: "Upcoming" },
+  active:    { c: T.green,  label: "Active" },
+  completed: { c: T.purple, label: "Completed" },
+  declined:  { c: T.red,    label: "Declined" },
 };
 
 function Badge({ status }) {
@@ -102,7 +105,7 @@ function GoldRule() {
   return <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${T.gold}66, transparent)` }} />;
 }
 
-/* ───────────────────────── LOGIN ───────────────────────── */
+/* ----------------------- LOGIN ----------------------- */
 function Login({ onIn }) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -126,7 +129,7 @@ function Login({ onIn }) {
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="coach@matchup.ph"
             style={{ width: "100%", boxSizing: "border-box", marginTop: 6, marginBottom: 16, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 10, padding: "13px 14px", color: T.text, fontSize: 14, outline: "none" }} />
           <label style={{ color: T.dim, fontSize: 12, fontWeight: 600 }}>PASSWORD</label>
-          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••"
+          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
             style={{ width: "100%", boxSizing: "border-box", marginTop: 6, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 10, padding: "13px 14px", color: T.text, fontSize: 14, outline: "none" }} />
           <button onClick={onIn} style={{
             width: "100%", marginTop: 22, background: `linear-gradient(180deg, ${T.gold}, #B8902C)`,
@@ -144,15 +147,82 @@ function Login({ onIn }) {
   );
 }
 
-/* ───────────────────────── PENDING TAB ───────────────────────── */
-function Pending({ bookings, blocked, act, simulate }) {
+/* ----------------------- SWIPE CARD ----------------------- */
+function SwipeCard({ conflict, onAct, children }) {
+  const [dx, setDx] = useState(0);
+  const [snap, setSnap] = useState(false);
+  const startX = useRef(null);
+  const leaving = useRef(false);
+
+  const down = (e) => {
+    if (leaving.current) return;
+    startX.current = e.clientX;
+    setSnap(false);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const move = (e) => {
+    if (startX.current == null || leaving.current) return;
+    setDx(e.clientX - startX.current);
+  };
+  const up = () => {
+    if (startX.current == null || leaving.current) return;
+    startX.current = null;
+    if (dx > 90) {
+      leaving.current = true; setSnap(true); setDx(480);
+      setTimeout(() => onAct(true), 220);
+    } else if (dx < -90) {
+      leaving.current = true; setSnap(true); setDx(-480);
+      setTimeout(() => onAct(false), 220);
+    } else {
+      setSnap(true); setDx(0);
+    }
+  };
+
+  const rightOp = Math.min(Math.max(dx, 0) / 90, 1);
+  const leftOp = Math.min(Math.max(-dx, 0) / 90, 1);
+
+  return (
+    <div style={{ position: "relative", marginBottom: 12 }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: 14, display: "flex",
+        alignItems: "center", justifyContent: "space-between", padding: "0 20px",
+        background: dx >= 0 ? `${T.green}1A` : `${T.red}1A`,
+        border: `1px solid ${dx >= 0 ? T.green : T.red}44`,
+      }}>
+        <span style={{ color: T.green, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6, opacity: rightOp }}>
+          <Check size={16} /> Approve
+        </span>
+        <span style={{ color: T.red, fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6, opacity: leftOp }}>
+          Decline <X size={16} />
+        </span>
+      </div>
+      <div
+        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+        style={{
+          transform: `translateX(${dx}px) rotate(${dx / 40}deg)`,
+          transition: snap ? "transform .22s ease" : "none",
+          touchAction: "pan-y", cursor: "grab", userSelect: "none",
+          background: T.panel, border: `1px solid ${conflict ? T.red + "55" : T.line}`,
+          borderLeft: `3px solid ${conflict ? T.red : T.gold}`,
+          borderRadius: 14, padding: 16, position: "relative",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------- PENDING TAB ----------------------- */
+function Pending({ bookings, blocked, gBlocked, act, simulate }) {
   const pend = bookings.filter((b) => b.status === "pending");
   const live = bookings.filter((b) => ["upcoming", "active"].includes(b.status));
   const conflictFor = (p) => {
     const hit = live.find((b) => overlaps(p, b));
     if (hit) return `Overlaps with ${hit.client} (${fmt12(hit.time)})`;
     for (let h = parseInt(p.time, 10); h < parseInt(p.time, 10) + p.dur; h++) {
-      if (blocked.has(`${p.date}_${String(h).padStart(2, "0")}:00`)) return "Falls on a blocked time slot";
+      const hh = `${String(h).padStart(2, "0")}:00`;
+      if (blocked.has(`${p.date}_${hh}`) || gBlocked.has(hh)) return "Falls on a blocked time slot";
     }
     return null;
   };
@@ -174,7 +244,7 @@ function Pending({ bookings, blocked, act, simulate }) {
         const dl = DAY_LABEL(b.date);
         const conflict = conflictFor(b);
         return (
-          <div key={b.id} className="mu-in" style={{ background: T.panel, border: `1px solid ${conflict ? T.red + "55" : T.line}`, borderLeft: `3px solid ${conflict ? T.red : T.gold}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <SwipeCard key={b.id} conflict={conflict} onAct={(ok) => act(b.id, ok)}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
               <div>
                 <div style={{ color: T.text, fontWeight: 600, fontSize: 15 }}>{b.client}</div>
@@ -192,15 +262,10 @@ function Pending({ bookings, blocked, act, simulate }) {
                 <AlertTriangle size={14} style={{ flexShrink: 0 }} /> {conflict}
               </div>
             )}
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-              <button onClick={() => act(b.id, true)} style={{ flex: 1, background: `${T.green}1A`, border: `1px solid ${T.green}66`, color: T.green, borderRadius: 9, padding: "12px 0", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                <Check size={15} /> Approve
-              </button>
-              <button onClick={() => act(b.id, false)} style={{ flex: 1, background: `${T.red}14`, border: `1px solid ${T.red}55`, color: T.red, borderRadius: 9, padding: "12px 0", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                <X size={15} /> Decline
-              </button>
+            <div style={{ marginTop: 12, color: `${T.dim}AA`, fontSize: 11, textAlign: "center" }}>
+              \u2190 swipe left to decline · swipe right to approve \u2192
             </div>
-          </div>
+          </SwipeCard>
         );
       })}
       <button onClick={simulate} style={{ width: "100%", marginTop: 8, background: "transparent", border: `1px dashed ${T.gold}55`, color: T.gold, borderRadius: 12, padding: "13px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -210,10 +275,11 @@ function Pending({ bookings, blocked, act, simulate }) {
   );
 }
 
-/* ───────────────────────── CALENDAR TAB ───────────────────────── */
-function Calendar({ bookings, blocked, toggleBlock }) {
+/* ----------------------- CALENDAR TAB ----------------------- */
+function Calendar({ bookings, blocked, gBlocked, toggleBlock }) {
   const days = Array.from({ length: 7 }, (_, i) => d(i));
   const [sel, setSel] = useState(days[0]);
+  const [mode, setMode] = useState("day"); // 'day' | 'global'
   const confirmed = bookings.filter((b) => b.date === sel && ["upcoming", "active", "completed"].includes(b.status));
   const pendings = bookings.filter((b) => b.date === sel && b.status === "pending");
   const findIn = (list, h) => list.find((b) => {
@@ -244,12 +310,57 @@ function Calendar({ bookings, blocked, toggleBlock }) {
           );
         })}
       </div>
-      <div style={{ marginTop: 8 }}>
+
+      {/* time blocking mode */}
+      <div style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 12, padding: "12px 14px", margin: "6px 0 14px" }}>
+        <div style={{ color: T.champagne, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, marginBottom: 9 }}>
+          <CalendarClock size={14} /> Time blockings
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setMode("day")} style={{
+            flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            background: mode === "day" ? `${T.gold}1F` : "transparent",
+            border: `1px solid ${mode === "day" ? T.gold : T.line}`,
+            color: mode === "day" ? T.champagne : T.dim,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>
+            <CalendarDays size={13} /> This day only
+          </button>
+          <button onClick={() => setMode("global")} style={{
+            flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            background: mode === "global" ? `${T.gold}1F` : "transparent",
+            border: `1px solid ${mode === "global" ? T.gold : T.line}`,
+            color: mode === "global" ? T.champagne : T.dim,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>
+            <Globe size={13} /> All days
+          </button>
+        </div>
+        <div style={{ color: `${T.dim}AA`, fontSize: 11, marginTop: 8 }}>
+          {mode === "day" ? `Tapping a slot blocks it for ${sel === TODAY ? "today" : DAY_LABEL(sel).full} only.` : "Tapping a slot blocks that time on EVERY day (e.g. lunch break)."}
+        </div>
+        {gBlocked.size > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+            {[...gBlocked].sort().map((h) => (
+              <button key={h} onClick={() => toggleBlock(sel, h, "global")} title="Tap to remove" style={{
+                background: `${T.gold}14`, border: `1px solid ${T.gold}55`, color: T.champagne,
+                borderRadius: 99, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 5,
+              }}>
+                <Globe size={10} /> {fmt12(h)} <X size={10} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
         {HOURS.map((h) => {
           const bk = findIn(confirmed, h);
           const pd = findIn(pendings, h);
           const key = `${sel}_${h}`;
-          const isBlocked = blocked.has(key);
+          const isDayBlocked = blocked.has(key);
+          const isGlobalBlocked = gBlocked.has(h);
           return (
             <div key={h} style={{ display: "flex", gap: 10, alignItems: "stretch", marginBottom: 6 }}>
               <div className="mu-num" style={{ width: 62, color: T.dim, fontSize: 12, paddingTop: 11, flexShrink: 0, textAlign: "right" }}>{fmt12(h)}</div>
@@ -263,16 +374,17 @@ function Calendar({ bookings, blocked, toggleBlock }) {
                   <div style={{ color: T.champagne, fontSize: 13, fontWeight: 600 }}>{pd.client}</div>
                   <div style={{ color: T.gold, fontSize: 11, marginTop: 2 }}>Awaiting your approval</div>
                 </div>
-              ) : isBlocked ? (
-                <button onClick={() => toggleBlock(key)} style={{
+              ) : (isDayBlocked || isGlobalBlocked) ? (
+                <button onClick={() => toggleBlock(sel, h, isGlobalBlocked ? "global" : "day")} style={{
                   flex: 1, borderRadius: 10, cursor: "pointer", border: `1px solid ${T.line}`,
                   background: `repeating-linear-gradient(45deg, ${T.panel}, ${T.panel} 6px, #14110C 6px, #14110C 12px)`,
                   color: T.dim, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0",
                 }}>
-                  <Ban size={13} /> Blocked — tap to free
+                  {isGlobalBlocked ? <Globe size={13} /> : <Ban size={13} />}
+                  {isGlobalBlocked ? "Blocked (all days) — tap to free" : "Blocked — tap to free"}
                 </button>
               ) : (
-                <button onClick={() => toggleBlock(key)} style={{ flex: 1, borderRadius: 10, cursor: "pointer", border: `1px dashed ${T.line}`, background: "transparent", color: `${T.dim}88`, fontSize: 12, padding: "12px 0" }}>
+                <button onClick={() => toggleBlock(sel, h, mode)} style={{ flex: 1, borderRadius: 10, cursor: "pointer", border: `1px dashed ${T.line}`, background: "transparent", color: `${T.dim}88`, fontSize: 12, padding: "12px 0" }}>
                   Available
                 </button>
               )}
@@ -284,7 +396,7 @@ function Calendar({ bookings, blocked, toggleBlock }) {
   );
 }
 
-/* ───────────────────────── BOOKINGS TAB ───────────────────────── */
+/* ----------------------- BOOKINGS TAB ----------------------- */
 function Bookings({ bookings }) {
   const [filter, setFilter] = useState("All");
   const [q, setQ] = useState("");
@@ -296,7 +408,10 @@ function Bookings({ bookings }) {
     .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
   return (
     <div className="mu-in">
-      <h2 className="mu-display" style={{ color: T.text, fontSize: 24, margin: 0 }}>All bookings</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <h2 className="mu-display" style={{ color: T.text, fontSize: 24, margin: 0 }}>All bookings</h2>
+        <span style={{ color: T.dim, fontSize: 11, fontWeight: 600, border: `1px solid ${T.line}`, borderRadius: 99, padding: "3px 10px" }}>{SPORT} coach</span>
+      </div>
       <div style={{ position: "relative", marginTop: 14 }}>
         <Search size={15} style={{ position: "absolute", left: 13, top: 13, color: T.dim }} />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client name"
@@ -314,14 +429,14 @@ function Bookings({ bookings }) {
       </div>
       {list.length === 0 && (
         <div style={{ border: `1px dashed ${T.line}`, borderRadius: 14, padding: 28, textAlign: "center", color: T.dim, fontSize: 13 }}>
-          {q ? `No bookings found for “${q}”.` : "No bookings here yet."}
+          {q ? `No bookings found for \u201c${q}\u201d.` : "No bookings here yet."}
         </div>
       )}
       {list.map((b) => {
         const dl = DAY_LABEL(b.date);
         const past = b.status === "completed" || b.status === "declined";
         return (
-          <div key={b.id} style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 14, padding: 14, marginBottom: 10, opacity: past ? 0.75 : 1, display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div key={b.id} style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 14, padding: 14, marginBottom: 10, opacity: past ? 0.8 : 1, display: "flex", justifyContent: "space-between", gap: 10 }}>
             <div>
               <div style={{ color: T.text, fontWeight: 600, fontSize: 14 }}>{b.client}</div>
               <div className="mu-num" style={{ color: T.dim, fontSize: 12, marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
@@ -339,12 +454,13 @@ function Bookings({ bookings }) {
   );
 }
 
-/* ───────────────────────── APP SHELL ───────────────────────── */
+/* ----------------------- APP SHELL ----------------------- */
 export default function MatchUpCoach() {
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState("pending");
   const [bookings, setBookings] = useState(SEED);
   const [blocked, setBlocked] = useState(new Set());
+  const [gBlocked, setGBlocked] = useState(new Set());
   const [toast, setToast] = useState(null);
   const [reqIdx, setReqIdx] = useState(0);
 
@@ -359,28 +475,37 @@ export default function MatchUpCoach() {
     setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: approve ? "upcoming" : "declined" } : x)));
     setToast({
       msg: approve
-        ? `Approved — Machi messaged ${b.client.split(" ")[0]}: "Confirmed na po! 🎾"`
+        ? `Approved — Machi messaged ${b.client.split(" ")[0]}: "Confirmed na po! \ud83c\udfbe"`
         : `Declined — Machi let ${b.client.split(" ")[0]} know & offered other slots`,
-      undo: approve ? null : () => {
+      undo: () => {
         setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: "pending" } : x)));
         setToast(null);
       },
     });
   };
 
-  const toggleBlock = (key) => {
-    setBlocked((s) => {
-      const n = new Set(s);
-      n.has(key) ? n.delete(key) : n.add(key);
-      return n;
-    });
+  const toggleBlock = (sel, h, mode) => {
+    if (mode === "global") {
+      setGBlocked((s) => {
+        const n = new Set(s);
+        n.has(h) ? n.delete(h) : n.add(h);
+        return n;
+      });
+    } else {
+      const key = `${sel}_${h}`;
+      setBlocked((s) => {
+        const n = new Set(s);
+        n.has(key) ? n.delete(key) : n.add(key);
+        return n;
+      });
+    }
   };
 
   const simulate = () => {
     const r = NEW_REQUESTS[reqIdx % NEW_REQUESTS.length];
     setReqIdx((i) => i + 1);
     setBookings((bs) => [...bs, { id: Date.now(), client: r.client, date: d(r.dOff), time: r.time, dur: 1, status: "pending", via: "Machi", note: r.note }]);
-    setToast({ msg: `Machi forwarded a new request from ${r.client.split(" ")[0]} 📩`, undo: null });
+    setToast({ msg: `Machi forwarded a new request from ${r.client.split(" ")[0]} \ud83d\udce9`, undo: null });
   };
 
   if (!authed) return (<><style>{FONTS}</style><Login onIn={() => setAuthed(true)} /></>);
@@ -394,7 +519,7 @@ export default function MatchUpCoach() {
   const nowH = `${String(hour).padStart(2, "0")}:00`;
   const next = todays.find((b) => b.time >= nowH);
   const todayLine = todays.length === 0
-    ? "No sessions today — rest day 💤"
+    ? "No sessions today — rest day \ud83d\udca4"
     : `${todays.length} session${todays.length > 1 ? "s" : ""} today${next ? ` · next at ${fmt12(next.time)}` : " · all done for today"}`;
 
   const TABS = [
@@ -433,8 +558,8 @@ export default function MatchUpCoach() {
 
       {/* content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 18px 90px" }}>
-        {tab === "pending" && <Pending bookings={bookings} blocked={blocked} act={act} simulate={simulate} />}
-        {tab === "calendar" && <Calendar bookings={bookings} blocked={blocked} toggleBlock={toggleBlock} />}
+        {tab === "pending" && <Pending bookings={bookings} blocked={blocked} gBlocked={gBlocked} act={act} simulate={simulate} />}
+        {tab === "calendar" && <Calendar bookings={bookings} blocked={blocked} gBlocked={gBlocked} toggleBlock={toggleBlock} />}
         {tab === "bookings" && <Bookings bookings={bookings} />}
       </div>
 
