@@ -123,19 +123,37 @@ async function runTool(name, input, ctx) {
       }).select().single();
       if (error) return { ok: false, error: error.message };
       if (coach.telegram_chat_id) {
-        const base = process.env.PUBLIC_URL || "";
-        await fetch(`${TG}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: coach.telegram_chat_id,
-            text: `📩 New booking request: ${input.client_name} — ${input.date} ${input.time} (${input.duration_hours}h)`,
-            reply_markup: { inline_keyboard: [[
-              { text: "✅ Approve", url: `${base}/act/${WEBHOOK_SECRET}/${data.id}/approve` },
-              { text: "❌ Decline", url: `${base}/act/${WEBHOOK_SECRET}/${data.id}/decline` }
-            ]]}
-          }),
-        });
+        const base = (process.env.PUBLIC_URL || "").trim().replace(/\/+$/, "");
+        const approveUrl = `${base}/act/${WEBHOOK_SECRET}/${data.id}/approve`;
+        const declineUrl = `${base}/act/${WEBHOOK_SECRET}/${data.id}/decline`;
+        console.log("Notifying coach", coach.telegram_chat_id, "base:", JSON.stringify(base));
+        try {
+          const r = await fetch(`${TG}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: coach.telegram_chat_id,
+              text: `📩 New booking request: ${input.client_name} — ${input.date} ${input.time} (${input.duration_hours}h)`,
+              reply_markup: { inline_keyboard: [[
+                { text: "✅ Approve", url: approveUrl },
+                { text: "❌ Decline", url: declineUrl }
+              ]]}
+            }),
+          });
+          const rj = await r.json();
+          if (!rj.ok) {
+            console.error("Button message rejected by Telegram:", JSON.stringify(rj));
+            await tgSend(coach.telegram_chat_id,
+              `📩 New booking request: ${input.client_name} — ${input.date} ${input.time} (${input.duration_hours}h)\n\n` +
+              `✅ Approve: ${approveUrl}\n❌ Decline: ${declineUrl}`);
+          } else {
+            console.log("Coach notified OK, message_id:", rj.result?.message_id);
+          }
+        } catch (e) {
+          console.error("Coach notify failed:", String(e));
+        }
+      } else {
+        console.error("No telegram_chat_id on coach row — coach NOT notified");
       }
       return { ok: true, booking_id: data.id, status: "pending" };
     }
