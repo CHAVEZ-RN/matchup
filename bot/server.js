@@ -124,10 +124,18 @@ async function runTool(name, input, ctx) {
       if (error) return { ok: false, error: error.message };
       if (coach.telegram_chat_id) {
         const base = process.env.PUBLIC_URL || "";
-        await tgSend(coach.telegram_chat_id,
-          `📩 New booking request: ${input.client_name} — ${input.date} ${input.time} (${input.duration_hours}h).\n\n` +
-          `✅ Approve: ${base}/act/${WEBHOOK_SECRET}/${data.id}/approve\n` +
-          `❌ Decline: ${base}/act/${WEBHOOK_SECRET}/${data.id}/decline`);
+        await fetch(`${TG}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: coach.telegram_chat_id,
+            text: `📩 New booking request: ${input.client_name} — ${input.date} ${input.time} (${input.duration_hours}h)`,
+            reply_markup: { inline_keyboard: [[
+              { text: "✅ Approve", url: `${base}/act/${WEBHOOK_SECRET}/${data.id}/approve` },
+              { text: "❌ Decline", url: `${base}/act/${WEBHOOK_SECRET}/${data.id}/decline` }
+            ]]}
+          }),
+        });
       }
       return { ok: true, booking_id: data.id, status: "pending" };
     }
