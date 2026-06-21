@@ -1,6 +1,8 @@
 // Machi bot server — Telegram <-> Claude <-> Supabase
-// Deploy on Railway/Render/Fly (or adapt to a Vercel function).
-// Required env vars: see .env.example
+// Multi-coach via deep links:
+//   Booking link:  https://t.me/<YourBot>?start=<coach_slug>
+//   Coach setup:   https://t.me/<YourBot>?start=setup_<coach_slug>
+// Deploy on Render/Railway. Env vars: see bot/.env.example
 
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
@@ -24,11 +26,11 @@ const PROMPT_TEMPLATE = readFileSync(new URL("./machi-system-prompt.md", import.
 
 /* ── helpers ─────────────────────────────────────────── */
 
-async function tgSend(chatId, text) {
+async function tgSend(chatId, text, extra = {}) {
   await fetch(`${TG}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({ chat_id: chatId, text, ...extra }),
   });
 }
 
@@ -36,11 +38,32 @@ function manilaToday() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // YYYY-MM-DD
 }
 
-async function getCoach() {
-  // Single-coach MVP: first coach row. Multi-coach later: route by bot or deep-link param.
-  const { data, error } = await supabase.from("coaches").select("*").limit(1).single();
-  if (error) throw error;
-  return data;
+async function getCoachBySlug(slug) {
+  const { data } = await supabase.from("coaches").select("*").eq("slug", slug).maybeSingle();
+  return data || null;
+}
+
+async function setSession(telegramUserId, coachId) {
+  await supabase.from("chat_sessions")
+    .upsert({ telegram_user_id: telegramUserId, coach_id: coachId, updated_at: new Date().toISOString() });
+}
+
+async function getCoachForChat(telegramUserId) {
+  const { data: sess } = await supabase.from("chat_sessions")
+    .select("coach_id").eq("telegram_user_id", telegramUserId).maybeSingle();
+  if (!sess) return null;
+  const { data: coach } = await supabase.from("coaches").select("*").eq("id", sess.coach_id).maybeSingle();
+  return coach || null;
+}
+
+// Parse "/start <param>" → { kind: 'setup' | 'book', slug } or null
+function parseStart(text) {
+  if (!text || !text.startsWith("/start")) return null;
+  const parts = text.trim().split(/\s+/);
+  const param = parts[1];
+  if (!param) return { kind: "bare" };
+  if (param.startsWith("setup_")) return { kind: "setup", slug: param.slice(6).toLowerCase() };
+  return { kind: "book", slug: param.toLowerCase() };
 }
 
 function buildSystemPrompt(coach) {
@@ -126,7 +149,6 @@ async function runTool(name, input, ctx) {
         const base = (process.env.PUBLIC_URL || "").trim().replace(/\/+$/, "");
         const approveUrl = `${base}/act/${WEBHOOK_SECRET}/${data.id}/approve`;
         const declineUrl = `${base}/act/${WEBHOOK_SECRET}/${data.id}/decline`;
-        console.log("Notifying coach", coach.telegram_chat_id, "base:", JSON.stringify(base));
         try {
           const r = await fetch(`${TG}/sendMessage`, {
             method: "POST",
@@ -142,18 +164,15 @@ async function runTool(name, input, ctx) {
           });
           const rj = await r.json();
           if (!rj.ok) {
-            console.error("Button message rejected by Telegram:", JSON.stringify(rj));
             await tgSend(coach.telegram_chat_id,
               `📩 New booking request: ${input.client_name} — ${input.date} ${input.time} (${input.duration_hours}h)\n\n` +
               `✅ Approve: ${approveUrl}\n❌ Decline: ${declineUrl}`);
-          } else {
-            console.log("Coach notified OK, message_id:", rj.result?.message_id);
           }
         } catch (e) {
           console.error("Coach notify failed:", String(e));
         }
       } else {
-        console.error("No telegram_chat_id on coach row — coach NOT notified");
+        console.error(`Coach ${coach.slug} has no telegram_chat_id — they haven't used their setup link yet.`);
       }
       return { ok: true, booking_id: data.id, status: "pending" };
     }
@@ -214,8 +233,8 @@ async function askMachi(coach, telegramUserId, history) {
 
 /* ── routes ─────────────────────────────────────────── */
 
-// Telegram webhook: set with
-// curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR-URL/webhook/<WEBHOOK_SECRET>"
+// Telegram webhook. Register with:
+// curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<YOUR-BOT-URL>/webhook/<WEBHOOK_SECRET>"
 app.post(`/webhook/:secret`, async (req, res) => {
   res.sendStatus(200); // ack immediately
   try {
@@ -226,9 +245,37 @@ app.post(`/webhook/:secret`, async (req, res) => {
     const text = msg.text;
     if (!text) { await tgSend(chatId, "Text po muna ako marunong basahin 😅 type niyo na lang po!"); return; }
 
-    const coach = await getCoach();
-    await supabase.from("messages").insert({ coach_id: coach.id, telegram_user_id: chatId, role: "user", content: text });
+    // 1) Handle deep-link /start params
+    const start = parseStart(text);
+    if (start) {
+      if (start.kind === "setup") {
+        const coach = await getCoachBySlug(start.slug);
+        if (!coach) { await tgSend(chatId, "Hmm, di ko mahanap yang coach setup link na yan 🤔 Double-check niyo po."); return; }
+        await supabase.from("coaches").update({ telegram_chat_id: chatId }).eq("id", coach.id);
+        await setSession(chatId, coach.id);
+        await tgSend(chatId, `✅ Connected na po, Coach ${coach.name}! Dito na darating ang booking requests niyo. I-share niyo na po ang booking link niyo sa clients. 🎾`);
+        return;
+      }
+      if (start.kind === "book") {
+        const coach = await getCoachBySlug(start.slug);
+        if (!coach) { await tgSend(chatId, "Hmm, di ko mahanap yang coach na yan 🤔 Baka mali yung link?"); return; }
+        await setSession(chatId, coach.id);
+        await tgSend(chatId, `Hi po! 👋 Si Machi 'to, booking assistant ni Coach ${coach.name} (${coach.sport}). Anong araw at oras po gusto niyong mag-book? 🎾`);
+        return;
+      }
+      // bare /start with no param
+      await tgSend(chatId, "Hi po! 🙏 Para makapag-book, buksan niyo po ang MatchUp booking link ng inyong coach. Kung coach po kayo, mag-sign up muna sa website para makuha ang link niyo.");
+      return;
+    }
 
+    // 2) Normal message — find which coach this user is booking with
+    const coach = await getCoachForChat(chatId);
+    if (!coach) {
+      await tgSend(chatId, "Hi po! 🙏 Para makapag-book, buksan niyo po muna ang MatchUp booking link ng inyong coach (galing sa kanyang IG o page). Yun po ang magko-connect sa atin. 😊");
+      return;
+    }
+
+    await supabase.from("messages").insert({ coach_id: coach.id, telegram_user_id: chatId, role: "user", content: text });
     const { data: hist } = await supabase.from("messages")
       .select("role,content").eq("coach_id", coach.id).eq("telegram_user_id", chatId)
       .order("created_at", { ascending: false }).limit(20);
@@ -267,7 +314,7 @@ app.get("/act/:secret/:booking_id/:action", async (req, res) => {
   }
 });
 
-// Called by the web app (or a Supabase webhook) after the coach approves/declines.
+// Called by the web app (or a Supabase webhook) after the coach approves/declines in the console.
 app.post("/notify-status", async (req, res) => {
   try {
     const { booking_id } = req.body;
