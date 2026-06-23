@@ -253,6 +253,52 @@ async function askMachi(coach, telegramUserId, history) {
   return "Ay sorry po, medyo nagloloko ako 😅 Try niyo po ulit in a bit!";
 }
 
+
+/* ── client notifications (single source of truth) ──── */
+
+function niceDate(d) {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
+}
+function nice12(t) {
+  const h = parseInt(String(t).slice(0, 2), 10);
+  return `${((h + 11) % 12) + 1}${String(t).slice(2, 5)} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+// Notifies the client about an approval/decline. Race-safe: only one caller wins.
+async function notifyClient(bookingId) {
+  // claim: flip notified false -> true atomically; if 0 rows, someone already sent
+  const { data: claimed } = await supabase.from("bookings")
+    .update({ notified: true }).eq("id", bookingId).eq("notified", false).select();
+  if (!claimed || claimed.length === 0) return false;
+  const b = claimed[0];
+  if (b.status === "upcoming") {
+    await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${niceDate(b.date)}, ${nice12(b.time)}.`);
+  } else if (b.status === "declined") {
+    await tgSend(b.telegram_user_id, `Hi po! Pasensya na, di po available si Coach sa ${niceDate(b.date)} ${nice12(b.time)} 🙏 Message niyo lang po ako ulit para humanap tayo ng ibang slot!`);
+  } else {
+    // not a notifiable status; release the claim
+    await supabase.from("bookings").update({ notified: false }).eq("id", bookingId);
+    return false;
+  }
+  return true;
+}
+
+// Watch the DB: whenever a booking becomes upcoming/declined, tell the client.
+// This makes approvals work no matter where they happen (website, Telegram, DB).
+function startBookingWatcher() {
+  supabase
+    .channel("booking-status-watch")
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bookings" },
+      async (payload) => {
+        const b = payload.new;
+        if (!b || b.notified) return;
+        if (b.status === "upcoming" || b.status === "declined") {
+          try { await notifyClient(b.id); } catch (e) { console.error("notifyClient (realtime) failed:", String(e)); }
+        }
+      })
+    .subscribe((status) => console.log("Booking watcher:", status));
+}
+
 /* ── routes ─────────────────────────────────────────── */
 
 // Telegram webhook. Register with:
@@ -354,15 +400,9 @@ app.get("/act/:secret/:booking_id/:action", async (req, res) => {
     if (!b) return res.status(404).send("Booking not found.");
     if (b.status !== "pending") return res.send(`Already ${b.status}. ✋`);
     const status = action === "approve" ? "upcoming" : "declined";
-    await supabase.from("bookings").update({ status }).eq("id", booking_id);
-    const nice = new Date(b.date + "T00:00:00").toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
-    const t12 = (() => { const h = parseInt(b.time.slice(0, 2), 10); return `${((h + 11) % 12) + 1}${b.time.slice(2, 5)} ${h >= 12 ? "PM" : "AM"}`; })();
-    if (status === "upcoming")
-      await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${nice}, ${t12}.`);
-    else
-      await tgSend(b.telegram_user_id, `Hi po! Di po available si Coach sa ${nice} ${t12} 🙏 Message niyo lang po ako ulit para maghanap tayo ng ibang slot!`);
-    await supabase.from("bookings").update({ notified: true }).eq("id", booking_id);
-    res.send(`Booking ${action}d ✅ — ${b.client_name}, ${nice} ${t12}. Client has been notified. You can close this tab.`);
+    await supabase.from("bookings").update({ status, notified: false }).eq("id", booking_id);
+    await notifyClient(booking_id);
+    res.send(`Booking ${action}d ✅ — ${b.client_name}, ${niceDate(b.date)} ${nice12(b.time)}. Client has been notified. You can close this tab.`);
   } catch (e) {
     res.status(500).send("Error: " + String(e));
   }
@@ -372,15 +412,7 @@ app.get("/act/:secret/:booking_id/:action", async (req, res) => {
 app.post("/notify-status", async (req, res) => {
   try {
     const { booking_id } = req.body;
-    const { data: b } = await supabase.from("bookings").select("*").eq("id", booking_id).single();
-    if (!b || b.notified) return res.json({ ok: true, skipped: true });
-    const nice = new Date(b.date + "T00:00:00").toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
-    const t12 = (() => { const h = parseInt(b.time.slice(0, 2), 10); return `${((h + 11) % 12) + 1}${b.time.slice(2, 5)} ${h >= 12 ? "PM" : "AM"}`; })();
-    if (b.status === "upcoming")
-      await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${nice}, ${t12}.`);
-    else if (b.status === "declined")
-      await tgSend(b.telegram_user_id, `Hi po! Di po available si Coach sa ${nice} ${t12} 🙏 Message niyo lang po ako ulit para maghanap tayo ng ibang slot!`);
-    await supabase.from("bookings").update({ notified: true }).eq("id", booking_id);
+    await notifyClient(booking_id);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
@@ -388,4 +420,7 @@ app.post("/notify-status", async (req, res) => {
 });
 
 app.get("/", (_, res) => res.send("Machi is awake 🤖"));
-app.listen(PORT, () => console.log(`Machi listening on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Machi listening on :${PORT}`);
+  startBookingWatcher();
+});
