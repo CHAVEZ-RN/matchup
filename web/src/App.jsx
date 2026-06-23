@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { supabase, BOT_URL, BOT_USERNAME } from "./supabase";
 import {
   CalendarDays, Inbox, ListChecks, Check, X, Send, Search, Clock, History,
   Sparkles, LogOut, Ban, AlertTriangle, Undo2, Globe, CalendarClock, Settings,
@@ -51,6 +52,46 @@ const THEMES = {
 };
 
 const COACH = { name: "Rio", sport: "Tennis", rate: 800, currency: "₱" };
+
+/* ----------------------- REAL-DATA HELPERS ----------------------- */
+const nowHourLocal = new Date().getHours();
+function agoFrom(ts) {
+  if (!ts) return "just now";
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? "s" : ""} ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+// Supabase row -> the shape the UI components expect.
+function mapBooking(row, rate) {
+  const time = String(row.time).slice(0, 5);
+  let status = row.status;
+  if (status === "upcoming" && row.date === TODAY) {
+    const sh = parseInt(time.slice(0, 2), 10);
+    if (nowHourLocal >= sh && nowHourLocal < sh + row.duration_hours) status = "active";
+  }
+  return {
+    id: row.id, client: row.client_name, tg: "Telegram",
+    date: row.date, time, dur: row.duration_hours,
+    status, via: row.via || "Machi", note: row.note || "",
+    amount: (rate || 800) * row.duration_hours, paid: false,
+    ago: agoFrom(row.created_at),
+  };
+}
+function slugify(name) {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 20) || "coach";
+}
+async function notifyBot(bookingId) {
+  if (!BOT_URL) return;
+  try {
+    await fetch(`${BOT_URL}/notify-status`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ booking_id: bookingId }),
+    });
+  } catch (e) { /* non-fatal */ }
+}
 
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Inter:wght@400;500;600;700&display=swap');
@@ -117,20 +158,6 @@ const avColor = (name) => AV_COLORS[name.split("").reduce((a, c) => a + c.charCo
 
 /* ----------------------- DEMO DATA ----------------------- */
 const S = COACH.sport;
-const SEED = [
-  { id: 1, client: "Andrea Reyes",  tg: "@andrea_r",  date: d(0),  time: "07:00", dur: 1, status: "active",    via: "Machi",  note: `${S} · fundamentals`, paid: true,  amount: 800 },
-  { id: 2, client: "JM dela Cruz",  tg: "@jm_dc",     date: d(0),  time: "16:00", dur: 1, status: "upcoming",  via: "Machi",  note: `${S} · serve drills`, paid: false, amount: 800 },
-  { id: 3, client: "Miguel Santos", tg: "@miguels",   date: d(1),  time: "09:00", dur: 2, status: "pending",   via: "Machi",  note: "pwede po ba sat 9am, 2 hrs?", ago: "4 min ago", amount: 1600 },
-  { id: 4, client: "Kayla Lim",     tg: "@kaylalim",  date: d(0),  time: "16:00", dur: 1, status: "pending",   via: "Machi",  note: "gusto ko sana 4pm po today", ago: "12 min ago", amount: 800 },
-  { id: 5, client: "Paolo Garcia",  tg: "@paolog",    date: d(-1), time: "08:00", dur: 1, status: "completed", via: "Machi",  note: `${S} · footwork`, paid: true,  amount: 800 },
-  { id: 6, client: "Bea Tan",       tg: "@beatan",    date: d(-3), time: "17:00", dur: 1, status: "completed", via: "Manual", note: `${S} · conditioning`, paid: true, amount: 800 },
-  { id: 7, client: "Carlos Uy",     tg: "@carlosuy",  date: d(3),  time: "10:00", dur: 1, status: "upcoming",  via: "Machi",  note: `${S} · first session`, paid: false, amount: 800 },
-];
-const NEW_REQUESTS = [
-  { client: "Trisha Mendoza", tg: "@trisham", note: "hi po! free pa po ba bukas morning?", time: "08:00", dOff: 1, dur: 1 },
-  { client: "Ken Villanueva", tg: "@kenv",    note: "coach pa-book ng sunday 4pm 🙏",      time: "16:00", dOff: 4, dur: 1 },
-  { client: "Liza Fernandez", tg: "@lizaf",   note: "2 hours sana, weekend po",            time: "14:00", dOff: 5, dur: 2 },
-];
 
 const overlaps = (a, b) => {
   if (a.date !== b.date) return false;
@@ -202,16 +229,75 @@ function Brand({ T, size = 56 }) {
   );
 }
 
-function Login({ T, onIn, onTheme }) {
+function AuthScreen({ T, onTheme }) {
+  const [mode, setMode] = useState("login"); // login | signup
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [name, setName] = useState("");
+  const [sport, setSport] = useState("Tennis");
   const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
+
   const ring = T.primary + "33", ringb = T.primary;
   const inputStyle = {
     width: "100%", boxSizing: "border-box", marginTop: 6, background: T.soft,
     border: `1px solid ${T.line2}`, borderRadius: 11, padding: "13px 14px",
     color: T.text, fontSize: 15, outline: "none", "--ring": ring, "--ringb": ringb,
   };
+
+  async function createCoachRow(userId) {
+    const base = slugify(name);
+    for (let i = 0; i < 6; i++) {
+      const slug = i === 0 ? base : `${base}${Math.floor(Math.random() * 900 + 100)}`;
+      const { data, error } = await supabase.from("coaches").insert({
+        user_id: userId, name: name.trim(), slug, sport,
+        rate: 800, start_hour: 6, end_hour: 21,
+        working_hours: "6:00 AM - 9:00 PM", info: "",
+      }).select().single();
+      if (!error) return data;
+      if (error.code !== "23505") throw error;            // real error
+      if ((error.message || "").includes("user_id")) return null; // already has a coach row
+    }
+    throw new Error("Couldn't make a unique link — try a slightly different name.");
+  }
+
+  async function submit() {
+    setErr(""); setInfo(""); setBusy(true);
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
+        if (error) throw error;
+        // session change handled by the shell
+      } else {
+        if (!name.trim()) throw new Error("Please enter your name.");
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(), password: pw, options: { data: { name: name.trim(), sport } },
+        });
+        if (error) throw error;
+        if (!data.session) {
+          setInfo("Account created! If email confirmation is on, check your inbox, then sign in. (Tip: turn it off in Supabase for instant signup.)");
+          setMode("login"); setBusy(false); return;
+        }
+        await createCoachRow(data.user.id);
+        // session change handled by the shell
+      }
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function forgot() {
+    if (!email.trim()) { setErr("Enter your email first, then tap Forgot."); return; }
+    setErr(""); 
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    setInfo(error ? "" : "Password reset link sent to your email.");
+    if (error) setErr(error.message);
+  }
+
   return (
     <div className="mu-body" style={{ minHeight: "100vh", background: T.bg, display: "flex" }}>
       {/* form side */}
@@ -225,56 +311,52 @@ function Login({ T, onIn, onTheme }) {
             </div>
           </div>
           <h2 className="mu-display" style={{ color: T.text, fontSize: 22, margin: "0 0 6px", lineHeight: 1.25 }}>
-            Your clients book on Telegram.<br />You just tap approve.
+            {mode === "login" ? <>Welcome back, Coach.</> : <>Your clients book on Telegram.<br />You just tap approve.</>}
           </h2>
-          <p style={{ color: T.text2, fontSize: 14, margin: "0 0 22px", lineHeight: 1.5 }}>
-            Machi chats with your clients in Taglish and lines up the bookings. You stay in control.
+          <p style={{ color: T.text2, fontSize: 14, margin: "0 0 20px", lineHeight: 1.5 }}>
+            {mode === "login" ? "Sign in to your coach console." : "Create your account and get your own booking link."}
           </p>
 
-          <button onClick={onIn} className="mu-tap" style={{
-            width: "100%", background: T.telegram, color: "#fff", fontWeight: 600, fontSize: 15,
-            border: "none", borderRadius: 11, padding: "14px 0", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
-          }}>
-            <Send size={17} /> Continue with Telegram
-          </button>
-          <button onClick={onIn} className="mu-tap" style={{
-            width: "100%", marginTop: 10, background: T.card, color: T.text, fontWeight: 600, fontSize: 15,
-            border: `1px solid ${T.line2}`, borderRadius: 11, padding: "13px 0", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
-          }}>
-            <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.6c2.1-1.9 3.2-4.8 3.2-7.9Z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.7l-3.6-2.7c-1 .7-2.3 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.8A11 11 0 0 0 12 23Z"/><path fill="#FBBC05" d="M6 14.3a6.6 6.6 0 0 1 0-4.2V7.3H2.3a11 11 0 0 0 0 9.8L6 14.3Z"/><path fill="#EA4335" d="M12 5.5c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.3 7.3L6 10.1c.9-2.6 3.2-4.6 6-4.6Z"/></svg>
-            Sign in with Google
-          </button>
+          {mode === "signup" && (<>
+            <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Your name</label>
+            <input className="mu-focus" value={name} onChange={(e) => setName(e.target.value)} placeholder="Coach Rio" style={inputStyle} />
+            <div style={{ marginTop: 14 }}>
+              <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Sport</label>
+              <input className="mu-focus" value={sport} onChange={(e) => setSport(e.target.value)} placeholder="Tennis" style={inputStyle} />
+            </div>
+          </>)}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
-            <div style={{ flex: 1, height: 1, background: T.line }} />
-            <span style={{ color: T.dim, fontSize: 12 }}>or with email</span>
-            <div style={{ flex: 1, height: 1, background: T.line }} />
+          <div style={{ marginTop: mode === "signup" ? 14 : 0 }}>
+            <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Email</label>
+            <input className="mu-focus" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="coach@matchup.ph" style={inputStyle} />
           </div>
 
-          <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Email</label>
-          <input className="mu-focus" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="coach@matchup.ph" style={inputStyle} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
             <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Password</label>
-            <a onClick={onIn} style={{ color: T.primary, fontSize: 12, cursor: "pointer" }}>Forgot?</a>
+            {mode === "login" && <a onClick={forgot} style={{ color: T.primary, fontSize: 12, cursor: "pointer" }}>Forgot?</a>}
           </div>
           <div style={{ position: "relative" }}>
-            <input className="mu-focus" type={show ? "text" : "password"} value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••" style={{ ...inputStyle, paddingRight: 44 }} />
+            <input className="mu-focus" type={show ? "text" : "password"} value={pw} onChange={(e) => setPw(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="••••••••" style={{ ...inputStyle, paddingRight: 44 }} />
             <button onClick={() => setShow((s) => !s)} aria-label="Toggle password" style={{ position: "absolute", right: 8, top: 13, background: "none", border: "none", color: T.dim, cursor: "pointer", padding: 6 }}>
               {show ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
           </div>
 
-          <button onClick={onIn} className="mu-tap" style={{
+          {err && <div style={{ marginTop: 12, color: T.declined, background: T.declinedBg, borderRadius: 10, padding: "9px 12px", fontSize: 13 }}>{err}</div>}
+          {info && <div style={{ marginTop: 12, color: T.success, background: T.activeBg, borderRadius: 10, padding: "9px 12px", fontSize: 13 }}>{info}</div>}
+
+          <button onClick={submit} disabled={busy} className="mu-tap" style={{
             width: "100%", marginTop: 18, background: T.primary, color: T.primaryInk, fontWeight: 700,
-            fontSize: 15, border: "none", borderRadius: 11, padding: "14px 0", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            fontSize: 15, border: "none", borderRadius: 11, padding: "14px 0", cursor: busy ? "default" : "pointer",
+            opacity: busy ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>
-            Sign in <ArrowRight size={16} />
+            {busy ? "Please wait…" : (mode === "login" ? <>Sign in <ArrowRight size={16} /></> : <>Create account <ArrowRight size={16} /></>)}
           </button>
-          <button onClick={onIn} style={{ width: "100%", marginTop: 12, background: "none", border: "none", color: T.dim, fontSize: 13, cursor: "pointer" }}>
-            Try the demo →
+
+          <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(""); setInfo(""); }}
+            style={{ width: "100%", marginTop: 14, background: "none", border: "none", color: T.text2, fontSize: 13, cursor: "pointer" }}>
+            {mode === "login" ? "New coach? Create an account →" : "Already have an account? Sign in →"}
           </button>
         </div>
       </div>
@@ -286,24 +368,23 @@ function Login({ T, onIn, onTheme }) {
         </button>
         <div style={{ maxWidth: 360 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: T.activeBg, color: T.active, padding: "6px 12px", borderRadius: 99, fontSize: 12, fontWeight: 600 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 99, background: T.activeDot }} /> Trusted by coaches across Metro Manila
+            <span style={{ width: 6, height: 6, borderRadius: 99, background: T.activeDot }} /> Booking on autopilot for coaches
           </div>
-          {/* mini conversation -> booking preview */}
           <div style={{ marginTop: 22, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 16, padding: 16, boxShadow: T.shadow }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: T.dim, fontSize: 12, fontWeight: 600 }}>
               <Send size={13} style={{ color: T.telegram }} /> Telegram · Machi
             </div>
             <div style={{ background: T.card2, color: T.text2, fontSize: 13, padding: "9px 12px", borderRadius: "12px 12px 12px 4px", maxWidth: "82%", marginBottom: 8 }}>
-              coach pwede po bang mag-book ng tennis bukas 9am? 🎾
+              coach pwede po bang mag-book bukas 9am? 🎾
             </div>
             <div style={{ background: T.telegram, color: "#fff", fontSize: 13, padding: "9px 12px", borderRadius: "12px 12px 4px 12px", maxWidth: "82%", marginLeft: "auto", marginBottom: 12 }}>
-              Sige po! Naka-pending na — paghihintayin natin si Coach Rio mag-confirm ✅
+              Sige po! Naka-pending na — hihintayin natin i-confirm ✅
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, background: T.card, border: `1px solid ${T.line}`, borderRadius: 12, padding: 10 }}>
-              <Avatar name="Bea Tan" size={34} />
+              <Avatar name="New Client" size={34} />
               <div style={{ flex: 1 }}>
                 <div style={{ color: T.text, fontSize: 13, fontWeight: 600 }}>New request</div>
-                <div className="mu-num" style={{ color: T.dim, fontSize: 12 }}>Tomorrow · 9:00 AM · Tennis</div>
+                <div className="mu-num" style={{ color: T.dim, fontSize: 12 }}>Tomorrow · 9:00 AM</div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <span style={{ background: T.declinedBg, color: T.declined, borderRadius: 9, padding: 7, display: "flex" }}><X size={14} /></span>
@@ -312,9 +393,9 @@ function Login({ T, onIn, onTheme }) {
             </div>
           </div>
           <p style={{ color: T.text2, fontSize: 14, marginTop: 20, lineHeight: 1.6, fontStyle: "italic" }}>
-            "Dati nasa messages ko lahat ng booking, magulo. Ngayon tinatap ko lang. Game changer."
+            "Dati nasa messages ko lahat ng booking, magulo. Ngayon tinatap ko lang."
           </p>
-          <p style={{ color: T.dim, fontSize: 13, marginTop: 4 }}>— Coach Marco, badminton · QC</p>
+          <p style={{ color: T.dim, fontSize: 13, marginTop: 4 }}>— a MatchUp coach</p>
         </div>
       </div>
     </div>
@@ -369,10 +450,37 @@ function PendingCard({ T, b, conflict, onOpen, onApprove, onDecline }) {
   );
 }
 
-function Pending({ T, bookings, blocked, gBlocked, conflictFor, onOpen, onApprove, onDecline, simulate }) {
+function Pending({ T, bookings, blocked, gBlocked, conflictFor, onOpen, onApprove, onDecline, simulate, bookingLink, setupLink, telegramConnected }) {
   const pend = bookings.filter((b) => b.status === "pending");
+  const [copied, setCopied] = useState(false);
+  const copy = async (text) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch {}
+  };
   return (
     <div className="mu-in">
+      {/* Your booking link — share to get bookings */}
+      {bookingLink && (
+        <div style={{ background: T.card, border: `1px solid ${T.line}`, borderRadius: 14, padding: "13px 14px", marginBottom: 16, boxShadow: T.shadow }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, color: T.text, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+            <Send size={14} style={{ color: T.telegram }} /> Your booking link
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="mu-num" style={{ flex: 1, minWidth: 0, background: T.soft, border: `1px solid ${T.line2}`, borderRadius: 9, padding: "9px 11px", color: T.text2, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bookingLink}</div>
+            <button onClick={() => copy(bookingLink)} className="mu-tap" style={{ flexShrink: 0, background: T.primary, color: T.primaryInk, border: "none", borderRadius: 9, padding: "9px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <div style={{ color: T.dim, fontSize: 11.5, marginTop: 7 }}>Share this on your IG bio or with students — they tap it to book you.</div>
+          {!telegramConnected && setupLink && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.line}`, fontSize: 12 }}>
+              <span style={{ color: T.pending, fontWeight: 600 }}>⚠ Connect your Telegram once</span>
+              <span style={{ color: T.text2 }}> so requests reach you: </span>
+              <a href={setupLink} target="_blank" rel="noreferrer" style={{ color: T.primary, fontWeight: 600 }}>open setup link →</a>
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
         <h2 className="mu-display" style={{ color: T.text, fontSize: 25, margin: 0 }}>For approval</h2>
         {pend.length > 0 && <span className="mu-num" style={{ color: T.pending, fontSize: 13, fontWeight: 700 }}>{pend.length} waiting</span>}
@@ -391,13 +499,15 @@ function Pending({ T, bookings, blocked, gBlocked, conflictFor, onOpen, onApprov
         <PendingCard key={b.id} T={T} b={b} conflict={conflictFor(b)}
           onOpen={() => onOpen(b)} onApprove={() => onApprove(b.id)} onDecline={() => onDecline(b)} />
       ))}
-      <button onClick={simulate} style={{
-        width: "100%", marginTop: 6, background: "transparent", border: `1px dashed ${T.line2}`,
-        color: T.dim, borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600,
-        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-      }}>
-        <Sparkles size={13} /> Demo: simulate a Telegram booking
-      </button>
+      {simulate && (
+        <button onClick={simulate} style={{
+          width: "100%", marginTop: 6, background: "transparent", border: `1px dashed ${T.line2}`,
+          color: T.dim, borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600,
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          <Sparkles size={13} /> Demo: simulate a Telegram booking
+        </button>
+      )}
     </div>
   );
 }
@@ -407,7 +517,7 @@ function Calendar({ T, bookings, blocked, gBlocked, toggleBlock, onOpen, startH 
   const days = Array.from({ length: 7 }, (_, i) => d(i));
   const HRS = Array.from({ length: Math.max(1, endH - startH + 1) }, (_, i) => `${String(startH + i).padStart(2, "0")}:00`);
   const [sel, setSel] = useState(days[0]);
-  const [mode, setMode] = useState("day");
+
   const [openGroups, setOpenGroups] = useState(new Set());
   const nowHour = new Date().getHours();
 
@@ -421,7 +531,6 @@ function Calendar({ T, bookings, blocked, gBlocked, toggleBlock, onOpen, startH 
     const bk = findIn(confirmed, h); if (bk) return { type: "booked", data: bk, head: parseInt(bk.time, 10) === parseInt(h, 10) };
     const pd = findIn(pendings, h); if (pd) return { type: "pending", data: pd, head: parseInt(pd.time, 10) === parseInt(h, 10) };
     if (blocked.has(`${sel}_${h}`)) return { type: "blocked", scope: "day" };
-    if (gBlocked.has(h)) return { type: "blocked", scope: "global" };
     return { type: "free" };
   };
 
@@ -485,38 +594,13 @@ function Calendar({ T, bookings, blocked, gBlocked, toggleBlock, onOpen, startH 
 
       {/* blocking control */}
       <div style={{ background: T.card, border: `1px solid ${T.line}`, borderRadius: 14, padding: "12px 14px", margin: "12px 0 14px", boxShadow: T.shadow }}>
-        <div style={{ color: T.text, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <div style={{ color: T.text, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
           <CalendarClock size={15} style={{ color: T.accent }} /> Block time off
         </div>
-        <div style={{ color: T.dim, fontSize: 12, marginBottom: 9 }}>Choose how long, then tap a free slot below.</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[["day", sel === TODAY ? "Just today" : `Just ${DAY_LABEL(sel).short}`, CalendarDays], ["global", `Every ${DAY_LABEL(sel).weekday}`, Repeat]].map(([m, label, Icon]) => (
-            <button key={m} onClick={() => setMode(m)} className="mu-tap" style={{
-              flex: 1, padding: "10px 6px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-              background: mode === m ? T.primarySoft : "transparent", border: `1px solid ${mode === m ? T.primary : T.line2}`,
-              color: mode === m ? T.primary : T.text2, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            }}><Icon size={13} /> {label}</button>
-          ))}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, color: T.text2, fontSize: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, color: T.text2, fontSize: 12 }}>
           <span style={{ width: 7, height: 7, borderRadius: 99, background: T.accent, flexShrink: 0 }} />
-          {mode === "day"
-            ? <span>Tapping a slot blocks it <b style={{ color: T.text }}>only on {sel === TODAY ? "today" : DAY_LABEL(sel).short}</b>.</span>
-            : <span>Tapping a slot blocks that hour <b style={{ color: T.text }}>every {DAY_LABEL(sel).weekday}</b> (e.g. a weekly lunch break).</span>}
+          <span>Tap a free slot below to block it on <b style={{ color: T.text }}>{sel === TODAY ? "today" : DAY_LABEL(sel).full}</b>. Machi won't offer blocked times.</span>
         </div>
-        {gBlocked.size > 0 && (
-          <div style={{ marginTop: 11, paddingTop: 10, borderTop: `1px solid ${T.line}` }}>
-            <div style={{ color: T.dim, fontSize: 11, marginBottom: 7 }}>Blocked every week — tap to remove:</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {[...gBlocked].sort().map((h) => (
-                <button key={h} onClick={() => toggleBlock(sel, h, "global")} title="Tap to remove" className="mu-tap" style={{
-                  background: T.accentSoft, border: `1px solid ${T.accent}55`, color: T.accent, borderRadius: 99,
-                  padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
-                }}><Repeat size={10} /> {fmt12(h)} <X size={11} /></button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* legend */}
@@ -578,13 +662,13 @@ function Calendar({ T, bookings, blocked, gBlocked, toggleBlock, onOpen, startH 
                 {now && <NowLine />}
                 <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
                   <div className="mu-num" style={{ width: 62, color: T.dim, fontSize: 12, paddingTop: 13, flexShrink: 0, textAlign: "right" }}>{fmt12(r.h)}</div>
-                  <button onClick={() => toggleBlock(sel, r.h, r.s.scope)} className="mu-tap" style={{
+                  <button onClick={() => toggleBlock(sel, r.h)} className="mu-tap" style={{
                     flex: 1, borderRadius: 12, cursor: "pointer", border: `1px solid ${T.line2}`,
                     background: `repeating-linear-gradient(45deg, ${T.card2}, ${T.card2} 6px, ${T.soft} 6px, ${T.soft} 12px)`,
                     color: T.dim, fontSize: 12.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "13px 0",
                   }}>
-                    {r.s.scope === "global" ? <Repeat size={13} /> : <Ban size={13} />}
-                    {r.s.scope === "global" ? "Blocked every week — tap to free" : "Blocked — tap to free"}
+                    <Ban size={13} />
+                    Blocked — tap to free
                   </button>
                 </div>
               </div>
@@ -618,7 +702,7 @@ function Calendar({ T, bookings, blocked, gBlocked, toggleBlock, onOpen, startH 
                 r.hours.map((h) => (
                   <div key={h} style={{ display: "flex", gap: 10, marginBottom: 8 }}>
                     <div className="mu-num" style={{ width: 62, color: T.dim, fontSize: 12, paddingTop: 12, flexShrink: 0, textAlign: "right" }}>{fmt12(h)}</div>
-                    <button onClick={() => toggleBlock(sel, h, mode)} className="mu-tap" style={{ flex: 1, borderRadius: 12, cursor: "pointer", border: `1px dashed ${T.line2}`, background: "transparent", color: T.dim, fontSize: 12.5, padding: "12px 0" }}>Available</button>
+                    <button onClick={() => toggleBlock(sel, h)} className="mu-tap" style={{ flex: 1, borderRadius: 12, cursor: "pointer", border: `1px dashed ${T.line2}`, background: "transparent", color: T.dim, fontSize: 12.5, padding: "12px 0" }}>Available</button>
                   </div>
                 ))
               )}
@@ -785,7 +869,7 @@ function ConfirmDecline({ T, booking, onClose, onConfirm }) {
 }
 
 /* ----------------------- SETTINGS ----------------------- */
-function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave }) {
+function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave, onLogout, bookingLink, coachName, coachSlug }) {
   // local draft state so edits only apply on Save
   const [r, setR] = useState(rate);
   const [s, setS] = useState(startH);
@@ -863,6 +947,22 @@ function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave }
           cursor: changed ? "pointer" : "default" }}>
         {changed ? "Save changes" : "Saved"}
       </button>
+
+      {bookingLink && (
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.line}` }}>
+          <div style={{ color: T.text2, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Your booking link</div>
+          <div className="mu-num" style={{ background: T.soft, border: `1px solid ${T.line2}`, borderRadius: 9, padding: "9px 11px", color: T.text2, fontSize: 12, wordBreak: "break-all" }}>{bookingLink}</div>
+          <button onClick={() => navigator.clipboard?.writeText(bookingLink)} className="mu-tap" style={{ marginTop: 8, background: T.soft, border: `1px solid ${T.line2}`, color: T.text, borderRadius: 9, padding: "8px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Copy link</button>
+        </div>
+      )}
+
+      {onLogout && (
+        <button onClick={onLogout} className="mu-tap"
+          style={{ width: "100%", marginTop: 16, background: "transparent", color: T.declined,
+            border: `1px solid ${T.declined}44`, borderRadius: 12, padding: "12px 0", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+          Log out{coachName ? ` — ${coachName}` : ""}
+        </button>
+      )}
     </Sheet>
   );
 }
@@ -893,24 +993,74 @@ export default function MatchUpCoach() {
   const T = THEMES[themeName];
   const toggleTheme = () => setThemeName((n) => (n === "light" ? "dark" : "light"));
 
-  const [authed, setAuthed] = useState(false);
+  // ---- auth + profile ----
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [profile, setProfile] = useState(null);      // the coach row
+  const [loadingData, setLoadingData] = useState(false);
+
+  // ---- live data ----
   const [tab, setTab] = useState("pending");
-  const [bookings, setBookings] = useState(SEED);
+  const [bookings, setBookings] = useState([]);
   const [blocked, setBlocked] = useState(new Set());
-  const [gBlocked, setGBlocked] = useState(new Set());
+  const gBlocked = useMemo(() => new Set(), []);       // no recurring blocks in this schema
   const [toast, setToast] = useState(null);
-  const [reqIdx, setReqIdx] = useState(0);
-  const [rate, setRate] = useState(COACH.rate);
+  const [rate, setRate] = useState(800);
   const [startH, setStartH] = useState(6);
   const [endH, setEndH] = useState(21);
   const [detail, setDetail] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
-  const [notifs, setNotifs] = useState([
-    { msg: "Machi confirmed tomorrow's reminder to Andrea Reyes.", when: "1 hr ago" },
-    { msg: "New booking request from Kayla Lim.", when: "12 min ago" },
-  ]);
+
+  const rateRef = useRef(800);
+  useEffect(() => { rateRef.current = rate; }, [rate]);
+
+  // listen to auth
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // load this coach's data
+  async function loadData(coach) {
+    const r = coach.rate ?? 800;
+    const [{ data: bk }, { data: bl }] = await Promise.all([
+      supabase.from("bookings").select("*").eq("coach_id", coach.id).order("date").order("time"),
+      supabase.from("blocked_slots").select("*").eq("coach_id", coach.id),
+    ]);
+    setBookings((bk || []).map((row) => mapBooking(row, r)));
+    setBlocked(new Set((bl || []).map((x) => `${x.date}_${String(x.hour).slice(0, 5)}`)));
+  }
+
+  // when session changes, fetch the coach profile + data
+  useEffect(() => {
+    if (!session) { setProfile(null); setBookings([]); setBlocked(new Set()); return; }
+    let cancel = false;
+    (async () => {
+      setLoadingData(true);
+      const { data: coach } = await supabase.from("coaches").select("*").eq("user_id", session.user.id).maybeSingle();
+      if (cancel) return;
+      setProfile(coach || null);
+      if (coach) {
+        setRate(coach.rate ?? 800); setStartH(coach.start_hour ?? 6); setEndH(coach.end_hour ?? 21);
+        await loadData(coach);
+      }
+      setLoadingData(false);
+    })();
+    return () => { cancel = true; };
+  }, [session]);
+
+  // realtime: refetch when this coach's bookings change (e.g. a new Telegram booking)
+  useEffect(() => {
+    if (!profile) return;
+    const ch = supabase.channel(`bk-${profile.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `coach_id=eq.${profile.id}` },
+        () => loadData(profile))
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [profile]);
 
   useEffect(() => {
     if (!toast) return;
@@ -918,13 +1068,14 @@ export default function MatchUpCoach() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // ---- conflict / suggestion helpers ----
   const live = bookings.filter((b) => ["upcoming", "active"].includes(b.status));
   const conflictFor = (p) => {
     const hit = live.find((b) => overlaps(p, b));
     if (hit) return `Overlaps with ${hit.client} (${fmt12(hit.time)})`;
     for (let h = parseInt(p.time, 10); h < parseInt(p.time, 10) + p.dur; h++) {
       const hh = `${String(h).padStart(2, "0")}:00`;
-      if (blocked.has(`${p.date}_${hh}`) || gBlocked.has(hh)) return "Falls on a blocked time slot";
+      if (blocked.has(`${p.date}_${hh}`)) return "Falls on a blocked time slot";
     }
     return null;
   };
@@ -937,41 +1088,93 @@ export default function MatchUpCoach() {
     return null;
   };
 
-  const approve = (id) => {
+  // ---- actions (persist to Supabase + notify the client on Telegram) ----
+  const setLocal = (id, patch) => setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+
+  const approve = async (id) => {
     const b = bookings.find((x) => x.id === id);
-    setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: "upcoming" } : x)));
-    setToast({ msg: `Approved — Machi messaged ${b.client.split(" ")[0]}: "Confirmed na po! 🎾"`, undo: () => { setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: "pending" } : x))); setToast(null); } });
+    if (!b) return;
+    setLocal(id, { status: "upcoming" });
+    await supabase.from("bookings").update({ status: "upcoming", notified: false }).eq("id", id);
+    notifyBot(id);
+    setToast({
+      msg: `Approved — Machi messaged ${b.client.split(" ")[0]}: "Confirmed na po! 🎾"`,
+      undo: async () => { setLocal(id, { status: "pending" }); await supabase.from("bookings").update({ status: "pending", notified: false }).eq("id", id); setToast(null); },
+    });
   };
-  const doDecline = (id) => {
+  const doDecline = async (id) => {
     const b = bookings.find((x) => x.id === id);
-    setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: "declined" } : x)));
+    if (!b) return;
+    setLocal(id, { status: "declined" });
     setConfirm(null); setDetail(null);
-    setToast({ msg: `Declined ${b.client.split(" ")[0]} — Machi offered other slots`, undo: () => { setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: "pending" } : x))); setToast(null); } });
+    await supabase.from("bookings").update({ status: "declined", notified: false }).eq("id", id);
+    notifyBot(id);
+    setToast({
+      msg: `Declined ${b.client.split(" ")[0]} — Machi let them know`,
+      undo: async () => { setLocal(id, { status: "pending" }); await supabase.from("bookings").update({ status: "pending", notified: false }).eq("id", id); setToast(null); },
+    });
   };
-  const complete = (id) => { setBookings((bs) => bs.map((x) => (x.id === id ? { ...x, status: "completed", paid: true } : x))); setToast({ msg: "Marked complete ✅", undo: null }); };
-  const noShow = (id) => { const b = bookings.find((x) => x.id === id); setToast({ msg: `${b.client.split(" ")[0]} marked as no-show`, undo: null }); };
-  const suggestSlot = (p) => {
+  const complete = async (id) => {
+    setLocal(id, { status: "completed" }); setDetail(null);
+    await supabase.from("bookings").update({ status: "completed" }).eq("id", id);
+    setToast({ msg: "Marked complete ✅", undo: null });
+  };
+  const noShow = async (id) => {
+    const b = bookings.find((x) => x.id === id);
+    setLocal(id, { status: "declined" }); setDetail(null);
+    await supabase.from("bookings").update({ status: "declined" }).eq("id", id);
+    setToast({ msg: `${b ? b.client.split(" ")[0] : "Client"} marked as no-show`, undo: null });
+  };
+  const suggestSlot = async (p) => {
     const t = suggestFor(p); if (!t) return;
-    setBookings((bs) => bs.map((x) => (x.id === p.id ? { ...x, time: t } : x)));
+    setLocal(p.id, { time: t });
     setDetail((dd) => (dd ? { ...dd, time: t } : dd));
-    setToast({ msg: `Machi proposed ${fmt12(t)} to ${p.client.split(" ")[0]} 🤝`, undo: null });
+    await supabase.from("bookings").update({ time: `${t}:00` }).eq("id", p.id);
+    setToast({ msg: `Moved ${p.client.split(" ")[0]} to ${fmt12(t)} 🤝`, undo: null });
   };
 
-  const toggleBlock = (sel, h, mode) => {
-    if (mode === "global") setGBlocked((s) => { const n = new Set(s); n.has(h) ? n.delete(h) : n.add(h); return n; });
-    else { const key = `${sel}_${h}`; setBlocked((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; }); }
+  const toggleBlock = async (sel, h) => {
+    if (!profile) return;
+    const key = `${sel}_${h}`;
+    const hourFull = `${h}:00`; // "07:00" -> "07:00:00"
+    if (blocked.has(key)) {
+      setBlocked((s) => { const n = new Set(s); n.delete(key); return n; });
+      await supabase.from("blocked_slots").delete().eq("coach_id", profile.id).eq("date", sel).eq("hour", hourFull);
+    } else {
+      setBlocked((s) => new Set(s).add(key));
+      await supabase.from("blocked_slots").insert({ coach_id: profile.id, date: sel, hour: hourFull });
+    }
   };
 
-  const simulate = () => {
-    const r = NEW_REQUESTS[reqIdx % NEW_REQUESTS.length];
-    setReqIdx((i) => i + 1);
-    const nb = { id: Date.now(), client: r.client, tg: r.tg, date: d(r.dOff), time: r.time, dur: r.dur, status: "pending", via: "Machi", note: r.note, ago: "just now", amount: rate * r.dur };
-    setBookings((bs) => [...bs, nb]);
-    setNotifs((ns) => [{ msg: `New booking request from ${r.client}.`, when: "just now" }, ...ns]);
-    setToast({ msg: `Machi forwarded a new request from ${r.client.split(" ")[0]} 📩`, undo: null });
+  const saveSettings = async ({ rate: nr, startH: ns, endH: ne }) => {
+    setRate(nr); setStartH(ns); setEndH(ne);
+    const wh = `${fmt12(`${String(ns).padStart(2, "0")}:00`)} - ${fmt12(`${String(ne).padStart(2, "0")}:00`)}`;
+    if (profile) {
+      await supabase.from("coaches").update({ rate: nr, start_hour: ns, end_hour: ne, working_hours: wh }).eq("id", profile.id);
+      setProfile((p) => ({ ...p, rate: nr, start_hour: ns, end_hour: ne, working_hours: wh }));
+    }
+    setBookings((bs) => bs.map((b) => ({ ...b, amount: nr * b.dur })));
+    setToast({ msg: `Settings saved — ${peso(nr)}/hr · ${wh}`, undo: null });
   };
 
-  if (!authed) return (<><style>{FONTS}</style><Login T={T} onIn={() => setAuthed(true)} onTheme={toggleTheme} /></>);
+  const logout = async () => { setShowSettings(false); await supabase.auth.signOut(); };
+
+  // ---- gates ----
+  if (authLoading) return (<><style>{FONTS}</style><div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", color: T.dim, fontSize: 14 }}>Loading…</div></>);
+  if (!session) return (<><style>{FONTS}</style><AuthScreen T={T} onTheme={toggleTheme} /></>);
+  if (loadingData && !profile) return (<><style>{FONTS}</style><div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", color: T.dim, fontSize: 14 }}>Setting up your console…</div></>);
+  if (!profile) return (<><style>{FONTS}</style><div className="mu-body" style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14, padding: 24, textAlign: "center" }}>
+    <div style={{ color: T.text, fontWeight: 700, fontSize: 18 }}>Almost there</div>
+    <div style={{ color: T.text2, fontSize: 14, maxWidth: 320 }}>Your account is missing a coach profile. Log out and sign up again, or add a coaches row in Supabase with your user_id.</div>
+    <button onClick={logout} className="mu-tap" style={{ background: T.primary, color: T.primaryInk, border: "none", borderRadius: 11, padding: "11px 22px", fontWeight: 700, cursor: "pointer" }}>Log out</button>
+  </div></>);
+
+  // ---- derived header ----
+  const coachName = profile.name || "Coach";
+  const coachFirst = coachName.replace(/^coach\s+/i, "").split(" ")[0];
+  const bookingLink = `https://t.me/${BOT_USERNAME}?start=${profile.slug}`;
+  const setupLink = `https://t.me/${BOT_USERNAME}?start=setup_${profile.slug}`;
+  const telegramConnected = !!profile.telegram_chat_id;
 
   const pendCount = bookings.filter((b) => b.status === "pending").length;
   const todays = bookings.filter((b) => b.date === TODAY && ["upcoming", "active"].includes(b.status)).sort((a, b) => (a.time < b.time ? -1 : 1));
@@ -982,6 +1185,12 @@ export default function MatchUpCoach() {
   const sessionLine = todays.length === 0 ? "No sessions today — rest day 💤"
     : `${todays.length} session${todays.length > 1 ? "s" : ""} today${next ? ` · next ${fmt12(next.time)}` : " · all done"}`;
   const todayLine = pendCount > 0 ? `${sessionLine}  ·  ${pendCount} request${pendCount > 1 ? "s" : ""} waiting` : sessionLine;
+
+  // notifications derived from real data (latest pending requests)
+  const notifs = bookings
+    .filter((b) => b.status === "pending")
+    .slice(-6).reverse()
+    .map((b) => ({ msg: `New booking request from ${b.client}.`, when: b.ago }));
 
   const TABS = [
     { id: "pending", label: "Pending", icon: Inbox, badge: pendCount },
@@ -1000,7 +1209,7 @@ export default function MatchUpCoach() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               <Brand T={T} size={38} />
               <div style={{ minWidth: 0 }}>
-                <div className="mu-display" style={{ color: T.text, fontSize: 16, lineHeight: 1.1 }}>{greet}, Coach {COACH.name}</div>
+                <div className="mu-display" style={{ color: T.text, fontSize: 16, lineHeight: 1.1 }}>{greet}, {coachName}</div>
                 <div className="mu-num" style={{ color: T.text2, fontSize: 11, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{todayLine}</div>
               </div>
             </div>
@@ -1015,16 +1224,24 @@ export default function MatchUpCoach() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <span title="Machi is connected to your Telegram and watching for bookings" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.success, background: T.activeBg, padding: "4px 10px", borderRadius: 99 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 99, background: T.activeDot, animation: "mu-pulse 1.8s infinite" }} /> Machi online
-            </span>
-            <span style={{ color: T.dim, fontSize: 11 }}>watching your Telegram</span>
+            {telegramConnected ? (
+              <>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.success, background: T.activeBg, padding: "4px 10px", borderRadius: 99 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: T.activeDot, animation: "mu-pulse 1.8s infinite" }} /> Machi online
+                </span>
+                <span style={{ color: T.dim, fontSize: 11 }}>watching your Telegram</span>
+              </>
+            ) : (
+              <a href={setupLink} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.pending, background: T.pendingBg || T.soft, padding: "4px 10px", borderRadius: 99, textDecoration: "none" }}>
+                <span style={{ width: 6, height: 6, borderRadius: 99, background: T.pendingDot }} /> Connect your Telegram →
+              </a>
+            )}
           </div>
         </div>
 
         {/* content */}
         <div className="mu-noscroll" style={{ flex: 1, overflowY: "auto", padding: "18px 16px 96px" }}>
-          {tab === "pending" && <Pending T={T} bookings={bookings} blocked={blocked} gBlocked={gBlocked} conflictFor={conflictFor} onOpen={setDetail} onApprove={approve} onDecline={setConfirm} simulate={simulate} />}
+          {tab === "pending" && <Pending T={T} bookings={bookings} blocked={blocked} gBlocked={gBlocked} conflictFor={conflictFor} onOpen={setDetail} onApprove={approve} onDecline={setConfirm} bookingLink={bookingLink} setupLink={setupLink} telegramConnected={telegramConnected} />}
           {tab === "calendar" && <Calendar T={T} bookings={bookings} blocked={blocked} gBlocked={gBlocked} toggleBlock={toggleBlock} onOpen={setDetail} startH={startH} endH={endH} />}
           {tab === "bookings" && <Bookings T={T} bookings={bookings} onOpen={setDetail} />}
         </div>
@@ -1060,11 +1277,8 @@ export default function MatchUpCoach() {
         <DetailSheet T={T} booking={detail} suggestion={detail ? suggestFor(detail) : null} rate={rate} onClose={() => setDetail(null)} onApprove={approve} onDecline={setConfirm} onSuggest={() => suggestSlot(detail)} onComplete={complete} onNoShow={noShow} />
         <ConfirmDecline T={T} booking={confirm} onClose={() => setConfirm(null)} onConfirm={() => doDecline(confirm.id)} />
         <SettingsSheet T={T} open={showSettings} onClose={() => setShowSettings(false)} onTheme={toggleTheme}
-          rate={rate} startH={startH} endH={endH}
-          onSave={({ rate: nr, startH: ns, endH: ne }) => {
-            setRate(nr); setStartH(ns); setEndH(ne);
-            setToast({ msg: `Settings saved — ${peso(nr)}/hr · ${fmt12(`${String(ns).padStart(2, "0")}:00`)}–${fmt12(`${String(ne).padStart(2, "0")}:00`)}`, undo: null });
-          }} />
+          rate={rate} startH={startH} endH={endH} onSave={saveSettings}
+          onLogout={logout} bookingLink={bookingLink} coachName={coachName} coachSlug={profile.slug} />
         <NotifSheet T={T} open={showNotif} onClose={() => setShowNotif(false)} items={notifs} />
       </div>
     </div>
