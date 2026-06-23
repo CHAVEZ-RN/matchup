@@ -1172,8 +1172,9 @@ export default function MatchUpCoach() {
   // ---- derived header ----
   const coachName = profile.name || "Coach";
   const coachFirst = coachName.replace(/^coach\s+/i, "").split(" ")[0];
-  const bookingLink = `https://t.me/${BOT_USERNAME}?start=${profile.slug}`;
-  const setupLink = `https://t.me/${BOT_USERNAME}?start=setup_${profile.slug}`;
+  const botUser = String(BOT_USERNAME).trim().replace(/^@/, "").replace(/\s+/g, "");
+  const bookingLink = `https://t.me/${botUser}?start=${profile.slug}`;
+  const setupLink = `https://t.me/${botUser}?start=setup_${profile.slug}`;
   const telegramConnected = !!profile.telegram_chat_id;
 
   const pendCount = bookings.filter((b) => b.status === "pending").length;
