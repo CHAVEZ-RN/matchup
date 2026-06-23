@@ -21,6 +21,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const app = express();
 app.use(express.json());
 
+// Allow the website (browser) to call /notify-status cross-origin
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 const TG = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const PROMPT_TEMPLATE = readFileSync(new URL("./machi-system-prompt.md", import.meta.url), "utf8");
 
@@ -269,7 +278,7 @@ app.post(`/webhook/:secret`, async (req, res) => {
           return;
         }
         await setSession(cbChatId, coach.id);
-        await tgSend(cbChatId, `Sige po! 🎾 Si Coach ${coach.name} (${coach.sport}) na po. Anong araw at oras gusto niyong mag-book?`);
+        await tgSend(cbChatId, `Sige po! Si Coach ${coach.name} (${coach.sport}) na po. Anong araw at oras gusto niyong mag-book?`);
       }
       return;
     }
@@ -288,7 +297,7 @@ app.post(`/webhook/:secret`, async (req, res) => {
         if (!coach) { await tgSend(chatId, "Hmm, di ko mahanap yang coach setup link na yan 🤔 Double-check niyo po."); return; }
         await supabase.from("coaches").update({ telegram_chat_id: chatId }).eq("id", coach.id);
         await setSession(chatId, coach.id);
-        await tgSend(chatId, `✅ Connected na po, Coach ${coach.name}! Dito na darating ang booking requests niyo. I-share niyo na po ang booking link niyo sa clients. 🎾`);
+        await tgSend(chatId, `✅ Connected na po, Coach ${coach.name}! Dito na darating ang booking requests niyo. I-share niyo na po ang booking link niyo sa clients.`);
         return;
       }
       if (start.kind === "book") {
@@ -299,7 +308,7 @@ app.post(`/webhook/:secret`, async (req, res) => {
           return;
         }
         await setSession(chatId, coach.id);
-        await tgSend(chatId, `Hi po! 👋 Si Machi 'to, booking assistant ni Coach ${coach.name} (${coach.sport}). Anong araw at oras po gusto niyong mag-book? 🎾`);
+        await tgSend(chatId, `Hi po! 👋 Si Machi 'to, booking assistant ni Coach ${coach.name} (${coach.sport}). Anong araw at oras po gusto niyong mag-book?`);
         return;
       }
       // bare /start with no param → show a coach picker so they can choose
@@ -349,7 +358,7 @@ app.get("/act/:secret/:booking_id/:action", async (req, res) => {
     const nice = new Date(b.date + "T00:00:00").toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
     const t12 = (() => { const h = parseInt(b.time.slice(0, 2), 10); return `${((h + 11) % 12) + 1}${b.time.slice(2, 5)} ${h >= 12 ? "PM" : "AM"}`; })();
     if (status === "upcoming")
-      await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${nice}, ${t12}. 🎾`);
+      await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${nice}, ${t12}.`);
     else
       await tgSend(b.telegram_user_id, `Hi po! Di po available si Coach sa ${nice} ${t12} 🙏 Message niyo lang po ako ulit para maghanap tayo ng ibang slot!`);
     await supabase.from("bookings").update({ notified: true }).eq("id", booking_id);
@@ -368,7 +377,7 @@ app.post("/notify-status", async (req, res) => {
     const nice = new Date(b.date + "T00:00:00").toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
     const t12 = (() => { const h = parseInt(b.time.slice(0, 2), 10); return `${((h + 11) % 12) + 1}${b.time.slice(2, 5)} ${h >= 12 ? "PM" : "AM"}`; })();
     if (b.status === "upcoming")
-      await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${nice}, ${t12}. 🎾`);
+      await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${nice}, ${t12}.`);
     else if (b.status === "declined")
       await tgSend(b.telegram_user_id, `Hi po! Di po available si Coach sa ${nice} ${t12} 🙏 Message niyo lang po ako ulit para maghanap tayo ng ibang slot!`);
     await supabase.from("bookings").update({ notified: true }).eq("id", booking_id);
