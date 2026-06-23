@@ -78,6 +78,19 @@ function buildSystemPrompt(coach) {
     .replaceAll("{MAX_PENDING_PER_CLIENT}", String(coach.max_pending_per_client));
 }
 
+
+async function sendCoachPicker(chatId, intro) {
+  const { data: coaches } = await supabase.from("coaches").select("name, sport, slug").order("name");
+  if (!coaches || coaches.length === 0) {
+    await tgSend(chatId, "Wala pa pong available na coach ngayon 🙏");
+    return;
+  }
+  const buttons = coaches.map((c) => [{ text: `${c.name} · ${c.sport}`, callback_data: `pick_${c.slug}` }]);
+  await tgSend(chatId, intro || "Sino pong coach gusto niyong i-book? 👇", {
+    reply_markup: { inline_keyboard: buttons },
+  });
+}
+
 /* ── tools Machi can call ───────────────────────────── */
 
 const TOOLS = [
@@ -239,6 +252,28 @@ app.post(`/webhook/:secret`, async (req, res) => {
   res.sendStatus(200); // ack immediately
   try {
     if (req.params.secret !== WEBHOOK_SECRET) return;
+
+    // Handle taps on the coach-picker buttons
+    const cq = req.body?.callback_query;
+    if (cq) {
+      const cbChatId = cq.message?.chat?.id;
+      const data = cq.data || "";
+      // acknowledge the tap so Telegram stops the loading spinner
+      try { await fetch(`${TG}/answerCallbackQuery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ callback_query_id: cq.id }) }); } catch {}
+      if (data.startsWith("pick_") && cbChatId) {
+        const slug = data.slice(5).toLowerCase();
+        const coach = await getCoachBySlug(slug);
+        if (!coach) {
+          await supabase.from("chat_sessions").delete().eq("telegram_user_id", cbChatId);
+          await tgSend(cbChatId, "Hmm, di ko po mahanap yang coach na yan 🤔");
+          return;
+        }
+        await setSession(cbChatId, coach.id);
+        await tgSend(cbChatId, `Sige po! 🎾 Si Coach ${coach.name} (${coach.sport}) na po. Anong araw at oras gusto niyong mag-book?`);
+      }
+      return;
+    }
+
     const msg = req.body?.message;
     if (!msg) return;
     const chatId = msg.chat.id;
@@ -258,20 +293,30 @@ app.post(`/webhook/:secret`, async (req, res) => {
       }
       if (start.kind === "book") {
         const coach = await getCoachBySlug(start.slug);
-        if (!coach) { await tgSend(chatId, "Hmm, di ko mahanap yang coach na yan 🤔 Baka mali yung link?"); return; }
+        if (!coach) {
+          await supabase.from("chat_sessions").delete().eq("telegram_user_id", chatId);
+          await tgSend(chatId, "Hmm, di ko mahanap yang coach na yan 🤔 Baka mali yung link? Pakibuksan ulit ang tamang MatchUp link ng coach niyo.");
+          return;
+        }
         await setSession(chatId, coach.id);
         await tgSend(chatId, `Hi po! 👋 Si Machi 'to, booking assistant ni Coach ${coach.name} (${coach.sport}). Anong araw at oras po gusto niyong mag-book? 🎾`);
         return;
       }
-      // bare /start with no param
-      await tgSend(chatId, "Hi po! 🙏 Para makapag-book, buksan niyo po ang MatchUp booking link ng inyong coach. Kung coach po kayo, mag-sign up muna sa website para makuha ang link niyo.");
+      // bare /start with no param → show a coach picker so they can choose
+      await sendCoachPicker(chatId, "Hi po! 👋 Si Machi 'to. Sino pong coach gusto niyong i-book?");
+      return;
+    }
+
+    // 1b) Let clients switch coaches anytime
+    if (/^\/(coaches|switch)\b/i.test(text)) {
+      await sendCoachPicker(chatId, "Sino pong coach gusto niyong i-book? 👇");
       return;
     }
 
     // 2) Normal message — find which coach this user is booking with
     const coach = await getCoachForChat(chatId);
     if (!coach) {
-      await tgSend(chatId, "Hi po! 🙏 Para makapag-book, buksan niyo po muna ang MatchUp booking link ng inyong coach (galing sa kanyang IG o page). Yun po ang magko-connect sa atin. 😊");
+      await sendCoachPicker(chatId, "Hi po! 🙏 Para makapag-book, piliin niyo po muna ang coach niyo:");
       return;
     }
 
