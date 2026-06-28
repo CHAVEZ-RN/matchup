@@ -266,23 +266,40 @@ function nice12(t) {
   return `${((h + 11) % 12) + 1}${String(t).slice(2, 5)} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+// Sends a Telegram message and throws if Telegram rejects it.
+async function tgSendStrict(chatId, text) {
+  const r = await fetch(`${TG}/sendMessage`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error("telegram send failed: " + JSON.stringify(j));
+  return true;
+}
+
 // Notifies the client about an approval/decline. Race-safe: only one caller wins.
+// If the Telegram send fails, the claim is released so the poller retries.
 async function notifyClient(bookingId) {
   // claim: flip notified false -> true atomically; if 0 rows, someone already sent
   const { data: claimed } = await supabase.from("bookings")
     .update({ notified: true }).eq("id", bookingId).eq("notified", false).select();
   if (!claimed || claimed.length === 0) return false;
   const b = claimed[0];
-  if (b.status === "upcoming") {
-    await tgSend(b.telegram_user_id, `Confirmed na po! ✅ See you ${niceDate(b.date)}, ${nice12(b.time)}.`);
-  } else if (b.status === "declined") {
-    await tgSend(b.telegram_user_id, `Hi po! Pasensya na, di po available si Coach sa ${niceDate(b.date)} ${nice12(b.time)} 🙏 Message niyo lang po ako ulit para humanap tayo ng ibang slot!`);
-  } else {
-    // not a notifiable status; release the claim
+  if (b.status !== "upcoming" && b.status !== "declined") {
     await supabase.from("bookings").update({ notified: false }).eq("id", bookingId);
     return false;
   }
-  return true;
+  const msg = b.status === "upcoming"
+    ? `Confirmed na po! ✅ See you ${niceDate(b.date)}, ${nice12(b.time)}.`
+    : `Hi po! Pasensya na, di po available si Coach sa ${niceDate(b.date)} ${nice12(b.time)} 🙏 Message niyo lang po ako ulit para humanap tayo ng ibang slot!`;
+  try {
+    await tgSendStrict(b.telegram_user_id, msg);
+    return true;
+  } catch (e) {
+    // release the claim so a later attempt (poller) can retry
+    await supabase.from("bookings").update({ notified: false }).eq("id", bookingId);
+    throw e;
+  }
 }
 
 // Watch the DB: whenever a booking becomes upcoming/declined, tell the client.
