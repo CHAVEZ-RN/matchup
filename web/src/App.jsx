@@ -1074,6 +1074,20 @@ export default function MatchUpCoach() {
     return () => { supabase.removeChannel(ch); };
   }, [profile]);
 
+  // refresh profile + data when the coach returns to the tab
+  // (the coaches row — e.g. telegram connection — isn't in realtime, so catch it here)
+  useEffect(() => {
+    if (!session) return;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      const { data: coach } = await supabase.from("coaches").select("*").eq("user_id", session.user.id).maybeSingle();
+      if (coach) { setProfile(coach); await loadData(coach); }
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => { document.removeEventListener("visibilitychange", refresh); window.removeEventListener("focus", refresh); };
+  }, [session]);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 5200);
