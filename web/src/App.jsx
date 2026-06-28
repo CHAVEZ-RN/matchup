@@ -15,39 +15,41 @@ import {
 const THEMES = {
   light: {
     name: "light",
-    bg: "#FAFAF7", card: "#FFFFFF", card2: "#F3F3EF", soft: "#F7F6F2",
-    line: "#E8E6DF", line2: "#D7D5CC",
-    primary: "#2D6CDF", primaryInk: "#FFFFFF", primarySoft: "#E9F0FD",
-    accent: "#C2922E", accentSoft: "#F8EFD8",
-    text: "#191C20", text2: "#51575F", dim: "#8A8F98",
-    telegram: "#229ED9",
-    pending: "#9A6B12", pendingBg: "#FBF0D8", pendingDot: "#E2A226",
-    upcoming: "#1F5BC4", upcomingBg: "#E7EFFD", upcomingDot: "#3B82F6",
-    active: "#157F3C", activeBg: "#E6F6EC", activeDot: "#22C55E",
-    completed: "#5A6068", completedBg: "#EFEFEC", completedDot: "#9AA0A8",
-    declined: "#C32A2A", declinedBg: "#FBE9E9", declinedDot: "#EF4444",
-    success: "#157F3C",
+    bg: "#F6F7F4", card: "#FFFFFF", card2: "#EFF1EC", soft: "#F1F3EE",
+    line: "#E4E6E0", line2: "#D2D5CC",
+    // brand: lime is the action color, charcoal-ink is the primary fill
+    primary: "#1B1E24", primaryInk: "#FFFFFF", primarySoft: "#EAEBE6",
+    accent: "#A6E22E", accentSoft: "#EEF8D6", accentInk: "#1B1E24",
+    text: "#16181D", text2: "#4C515B", dim: "#878D96",
+    telegram: "#1B1E24",
+    // status — quiet, semantic, used only on tiny tags/dots
+    pending: "#6E5A12", pendingBg: "#F6F1DD", pendingDot: "#C9A227",
+    upcoming: "#2C3038", upcomingBg: "#ECEEE9", upcomingDot: "#1B1E24",
+    active: "#3E7A12", activeBg: "#EDF7DD", activeDot: "#7DB52B",
+    completed: "#5A6068", completedBg: "#EEEFEC", completedDot: "#9AA0A8",
+    declined: "#A33A2A", declinedBg: "#F7E9E5", declinedDot: "#C85A45",
+    success: "#3E7A12",
     shadow: "0 1px 2px rgba(16,24,40,.05), 0 2px 8px rgba(16,24,40,.06)",
     shadowLg: "0 10px 40px rgba(16,24,40,.16)",
-    overlay: "rgba(20,22,26,.40)",
+    overlay: "rgba(16,18,21,.42)",
   },
   dark: {
     name: "dark",
-    bg: "#14110D", card: "#1C1A15", card2: "#23201A", soft: "#1A1712",
-    line: "#312C22", line2: "#403A2D",
-    primary: "#E5B45B", primaryInk: "#1A1504", primarySoft: "#2A2316",
-    accent: "#2DD4BF", accentSoft: "#10241F",
-    text: "#F2EEE6", text2: "#CFC8B9", dim: "#9A9285",
-    telegram: "#3BA7E0",
-    pending: "#E8BE6A", pendingBg: "#2A2316", pendingDot: "#E5B45B",
-    upcoming: "#8FB2E8", upcomingBg: "#162130", upcomingDot: "#5B8DE0",
-    active: "#6FD295", activeBg: "#13241A", activeDot: "#4FC383",
-    completed: "#AFA796", completedBg: "#221F19", completedDot: "#8E8775",
-    declined: "#E68C7C", declinedBg: "#2A1714", declinedDot: "#E07A66",
-    success: "#6FD295",
+    bg: "#121419", card: "#1A1D23", card2: "#22262E", soft: "#181B21",
+    line: "#2A2E36", line2: "#383D47",
+    primary: "#A6E22E", primaryInk: "#16181D", primarySoft: "#222A14",
+    accent: "#A6E22E", accentSoft: "#222A14", accentInk: "#16181D",
+    text: "#EDEFF2", text2: "#C2C7D0", dim: "#8A909B",
+    telegram: "#A6E22E",
+    pending: "#D8C26A", pendingBg: "#2A2614", pendingDot: "#CDB24A",
+    upcoming: "#C7CDD6", upcomingBg: "#22262E", upcomingDot: "#AEB4BD",
+    active: "#A6E22E", activeBg: "#1E2613", activeDot: "#A6E22E",
+    completed: "#AEB4BD", completedBg: "#20242B", completedDot: "#828A95",
+    declined: "#E8917E", declinedBg: "#2A1815", declinedDot: "#D9705A",
+    success: "#A6E22E",
     shadow: "0 6px 24px rgba(0,0,0,.45)",
     shadowLg: "0 16px 50px rgba(0,0,0,.6)",
-    overlay: "rgba(0,0,0,.55)",
+    overlay: "rgba(0,0,0,.58)",
   },
 };
 
@@ -217,13 +219,13 @@ function Brand({ T, size = 56 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: 16, flexShrink: 0,
-      background: T.primary, display: "flex", alignItems: "center", justifyContent: "center",
-      boxShadow: T.shadow,
+      background: "#1B1E24", display: "flex", alignItems: "center", justifyContent: "center",
+      boxShadow: T.shadow, border: T.name === "dark" ? "1px solid #2E333C" : "none",
     }}>
       <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none">
         <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 3.5V16H5.5A1.5 1.5 0 0 1 4 14.5v-9Z"
-          fill={T.primaryInk} opacity="0.95" />
-        <path d="M8.5 10.2l2.3 2.3 4.7-4.7" stroke={T.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          fill="#FFFFFF" opacity="0.96" />
+        <path d="M8.5 10.2l2.3 2.3 4.7-4.7" stroke="#A6E22E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </div>
   );
@@ -432,14 +434,14 @@ function PendingCard({ T, b, conflict, onOpen, onApprove, onDecline }) {
       )}
       <div style={{ display: "flex", gap: 9, marginTop: 13 }} onClick={(e) => e.stopPropagation()}>
         <button onClick={onDecline} className="mu-tap" style={{
-          flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.declined,
+          flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.text2,
           borderRadius: 11, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
         }}>
           <X size={16} /> Decline
         </button>
         <button onClick={onApprove} className="mu-tap" style={{
-          flex: 1.4, background: T.active, border: "none", color: "#fff",
+          flex: 1.4, background: T.accent, border: "none", color: T.accentInk,
           borderRadius: 11, padding: "11px 0", fontSize: 14, fontWeight: 700, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
         }}>
@@ -831,8 +833,8 @@ function DetailSheet({ T, booking, suggestion, rate = COACH.rate, onClose, onApp
 
       <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
         {b.status === "pending" && (<>
-          <button onClick={() => onDecline(b)} className="mu-tap" style={{ flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.declined, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><X size={16} /> Decline</button>
-          <button onClick={() => { onApprove(b.id); onClose(); }} className="mu-tap" style={{ flex: 1.4, background: T.active, border: "none", color: "#fff", borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={16} /> Approve</button>
+          <button onClick={() => onDecline(b)} className="mu-tap" style={{ flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.text2, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><X size={16} /> Decline</button>
+          <button onClick={() => { onApprove(b.id); onClose(); }} className="mu-tap" style={{ flex: 1.4, background: T.accent, border: "none", color: T.accentInk, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={16} /> Approve</button>
         </>)}
         {(b.status === "upcoming" || b.status === "active") && (<>
           <button onClick={() => { onNoShow(b.id); onClose(); }} className="mu-tap" style={{ flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.declined, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>No-show</button>
