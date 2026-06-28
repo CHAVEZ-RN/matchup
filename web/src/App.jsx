@@ -96,9 +96,9 @@ async function notifyBot(bookingId) {
 }
 
 const FONTS = `
-@import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 *{ -webkit-tap-highlight-color: transparent; }
-.mu-display { font-family: 'Marcellus', Georgia, serif; letter-spacing: 0.01em; }
+.mu-display { font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif; letter-spacing: -0.01em; font-weight: 600; }
 .mu-body { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
 .mu-num { font-variant-numeric: tabular-nums; }
 @keyframes mu-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -991,7 +991,7 @@ function NotifSheet({ T, open, onClose, items }) {
 
 /* ----------------------- APP SHELL ----------------------- */
 export default function MatchUpCoach() {
-  const [themeName, setThemeName] = useState("light");
+  const [themeName, setThemeName] = useState("dark");
   const T = THEMES[themeName];
   const toggleTheme = () => setThemeName((n) => (n === "light" ? "dark" : "light"));
 
