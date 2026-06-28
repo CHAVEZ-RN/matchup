@@ -154,7 +154,7 @@ const fmtRange = (t, dur) => {
 const peso = (n) => `${COACH.currency}${n.toLocaleString("en-PH")}`;
 const HOURS = Array.from({ length: 16 }, (_, i) => `${String(i + 6).padStart(2, "0")}:00`);
 
-const AV_COLORS = ["#2D6CDF", "#16A34A", "#C2922E", "#7C5CD6", "#E0563B", "#0E9488", "#D6398B"];
+const AV_COLORS = ["#7E9C5B", "#5E8DA8", "#A8895E", "#8A8FA0", "#6FA197", "#9C8AB0", "#A88A6F"];
 const initials = (name) => name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 const avColor = (name) => AV_COLORS[name.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
 
@@ -236,7 +236,7 @@ function AuthScreen({ T, onTheme }) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [name, setName] = useState("");
-  const [sport, setSport] = useState("Tennis");
+  const [sport, setSport] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -274,8 +274,9 @@ function AuthScreen({ T, onTheme }) {
         // session change handled by the shell
       } else {
         if (!name.trim()) throw new Error("Please enter your name.");
+        if (!sport.trim()) throw new Error("Please tell us what you coach.");
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(), password: pw, options: { data: { name: name.trim(), sport } },
+          email: email.trim(), password: pw, options: { data: { name: name.trim(), sport: sport.trim() } },
         });
         if (error) throw error;
         if (!data.session) {
@@ -323,8 +324,8 @@ function AuthScreen({ T, onTheme }) {
             <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Your name</label>
             <input className="mu-focus" value={name} onChange={(e) => setName(e.target.value)} placeholder="Coach Rio" style={inputStyle} />
             <div style={{ marginTop: 14 }}>
-              <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>Sport</label>
-              <input className="mu-focus" value={sport} onChange={(e) => setSport(e.target.value)} placeholder="Tennis" style={inputStyle} />
+              <label style={{ color: T.text2, fontSize: 13, fontWeight: 600 }}>What do you coach?</label>
+              <input className="mu-focus" value={sport} onChange={(e) => setSport(e.target.value)} placeholder="e.g. Tennis, Basketball, Boxing, Swimming" style={inputStyle} />
             </div>
           </>)}
 
@@ -377,7 +378,7 @@ function AuthScreen({ T, onTheme }) {
               <Send size={13} style={{ color: T.telegram }} /> Telegram · Machi
             </div>
             <div style={{ background: T.card2, color: T.text2, fontSize: 13, padding: "9px 12px", borderRadius: "12px 12px 12px 4px", maxWidth: "82%", marginBottom: 8 }}>
-              coach pwede po bang mag-book bukas 9am? 🎾
+              coach pwede po bang mag-book bukas 9am?
             </div>
             <div style={{ background: T.telegram, color: "#fff", fontSize: 13, padding: "9px 12px", borderRadius: "12px 12px 4px 12px", maxWidth: "82%", marginLeft: "auto", marginBottom: 12 }}>
               Sige po! Naka-pending na — hihintayin natin i-confirm ✅
@@ -493,7 +494,7 @@ function Pending({ T, bookings, blocked, gBlocked, conflictFor, onOpen, onApprov
       {pend.length === 0 && (
         <div style={{ border: `1px dashed ${T.line2}`, borderRadius: 16, padding: 34, textAlign: "center" }}>
           <CheckCircle2 size={30} style={{ color: T.success }} />
-          <div style={{ color: T.text, fontWeight: 600, fontSize: 15, marginTop: 10 }}>All caught up, Coach! 🎾</div>
+          <div style={{ color: T.text, fontWeight: 600, fontSize: 15, marginTop: 10 }}>All caught up, Coach!</div>
           <div style={{ color: T.dim, fontSize: 13, marginTop: 4 }}>Machi is watching your Telegram. New requests land here.</div>
         </div>
       )}
@@ -717,7 +718,7 @@ function Calendar({ T, bookings, blocked, gBlocked, toggleBlock, onOpen, startH 
 }
 
 /* ----------------------- BOOKINGS TAB ----------------------- */
-function Bookings({ T, bookings, onOpen }) {
+function Bookings({ T, bookings, onOpen, sport = "Coach" }) {
   const [filter, setFilter] = useState("All");
   const [q, setQ] = useState("");
   const FILTERS = ["All", "Upcoming", "Active", "Completed", "Declined"];
@@ -731,7 +732,7 @@ function Bookings({ T, bookings, onOpen }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <h2 className="mu-display" style={{ color: T.text, fontSize: 25, margin: 0 }}>All bookings</h2>
         <span style={{ color: T.dim, fontSize: 11, fontWeight: 600, border: `1px solid ${T.line}`, borderRadius: 99, padding: "4px 11px", display: "flex", alignItems: "center", gap: 5 }}>
-          <Star size={11} style={{ color: T.accent }} /> {COACH.sport} coach
+          <Star size={11} style={{ color: T.accent }} /> {sport} coach
         </span>
       </div>
       <div style={{ position: "relative", marginTop: 14 }}>
@@ -814,7 +815,7 @@ function DetailSheet({ T, booking, suggestion, rate = COACH.rate, onClose, onApp
       )}
       <Row icon={CalendarDays} label="When" value={`${dl.full}`} />
       <Row icon={Clock} label="Time" value={`${fmtRange(b.time, b.dur)} (${b.dur}h)`} />
-      <Row icon={ListChecks} label="Session" value={b.note?.includes("·") ? b.note.split("· ")[1] : COACH.sport} />
+      <Row icon={ListChecks} label="Session" value={b.note?.includes("·") ? b.note.split("· ")[1] : "1-on-1 session"} />
       <Row icon={Wallet} label="Payment"
         value={b.paid ? "Paid" : "Unpaid"} color={b.paid ? T.success : T.pending} />
       <Row icon={Wallet} label="Amount" value={peso(b.amount || rate * b.dur)} />
@@ -871,13 +872,15 @@ function ConfirmDecline({ T, booking, onClose, onConfirm }) {
 }
 
 /* ----------------------- SETTINGS ----------------------- */
-function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave, onLogout, bookingLink, coachName, coachSlug }) {
+function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave, onLogout, bookingLink, coachName, coachSport, coachSlug }) {
   // local draft state so edits only apply on Save
   const [r, setR] = useState(rate);
   const [s, setS] = useState(startH);
   const [e, setE] = useState(endH);
+  const [nm, setNm] = useState(coachName || "");
+  const [sp, setSp] = useState(coachSport || "");
   const [remind, setRemind] = useState(true);
-  useEffect(() => { setR(rate); setS(startH); setE(endH); }, [rate, startH, endH, open]);
+  useEffect(() => { setR(rate); setS(startH); setE(endH); setNm(coachName || ""); setSp(coachSport || ""); }, [rate, startH, endH, coachName, coachSport, open]);
   if (!open) return null;
 
   const inputStyle = {
@@ -896,11 +899,18 @@ function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave, 
       </div>
     </div>
   );
-  const changed = r !== rate || s !== startH || e !== endH;
+  const changed = r !== rate || s !== startH || e !== endH || nm.trim() !== (coachName || "") || sp.trim() !== (coachSport || "");
 
   return (
     <Sheet T={T} open={open} onClose={onClose}>
       <h3 className="mu-display" style={{ color: T.text, fontSize: 20, margin: "0 0 4px" }}>Settings</h3>
+
+      <Block icon={User} title="Your profile" sub="Your name and what you coach.">
+        <input className="mu-focus" value={nm} onChange={(ev) => setNm(ev.target.value)} placeholder="Coach name"
+          style={{ ...inputStyle, width: "100%", marginBottom: 8 }} />
+        <input className="mu-focus" value={sp} onChange={(ev) => setSp(ev.target.value)} placeholder="What you coach (e.g. Basketball)"
+          style={{ ...inputStyle, width: "100%" }} />
+      </Block>
 
       <Block icon={Wallet} title="Session rate" sub="What Machi quotes clients per hour.">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -943,7 +953,7 @@ function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave, 
         </button>
       </Block>
 
-      <button onClick={() => { onSave({ rate: r, startH: s, endH: e }); onClose(); }} disabled={!changed} className="mu-tap"
+      <button onClick={() => { onSave({ rate: r, startH: s, endH: e, name: nm.trim(), sport: sp.trim() }); onClose(); }} disabled={!changed} className="mu-tap"
         style={{ width: "100%", marginTop: 16, background: changed ? T.primary : T.soft, color: changed ? T.primaryInk : T.dim,
           border: changed ? "none" : `1px solid ${T.line2}`, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700,
           cursor: changed ? "pointer" : "default" }}>
@@ -1100,7 +1110,7 @@ export default function MatchUpCoach() {
     await supabase.from("bookings").update({ status: "upcoming", notified: false }).eq("id", id);
     notifyBot(id);
     setToast({
-      msg: `Approved — Machi messaged ${b.client.split(" ")[0]}: "Confirmed na po! 🎾"`,
+      msg: `Approved — Machi messaged ${b.client.split(" ")[0]}: "Confirmed na po!"`,
       undo: async () => { setLocal(id, { status: "pending" }); await supabase.from("bookings").update({ status: "pending", notified: false }).eq("id", id); setToast(null); },
     });
   };
@@ -1148,12 +1158,15 @@ export default function MatchUpCoach() {
     }
   };
 
-  const saveSettings = async ({ rate: nr, startH: ns, endH: ne }) => {
+  const saveSettings = async ({ rate: nr, startH: ns, endH: ne, name: nn, sport: nsp }) => {
     setRate(nr); setStartH(ns); setEndH(ne);
     const wh = `${fmt12(`${String(ns).padStart(2, "0")}:00`)} - ${fmt12(`${String(ne).padStart(2, "0")}:00`)}`;
+    const patch = { rate: nr, start_hour: ns, end_hour: ne, working_hours: wh };
+    if (nn) patch.name = nn;
+    if (nsp) patch.sport = nsp;
     if (profile) {
-      await supabase.from("coaches").update({ rate: nr, start_hour: ns, end_hour: ne, working_hours: wh }).eq("id", profile.id);
-      setProfile((p) => ({ ...p, rate: nr, start_hour: ns, end_hour: ne, working_hours: wh }));
+      await supabase.from("coaches").update(patch).eq("id", profile.id);
+      setProfile((p) => ({ ...p, ...patch }));
     }
     setBookings((bs) => bs.map((b) => ({ ...b, amount: nr * b.dur })));
     setToast({ msg: `Settings saved — ${peso(nr)}/hr · ${wh}`, undo: null });
@@ -1246,7 +1259,7 @@ export default function MatchUpCoach() {
         <div className="mu-noscroll" style={{ flex: 1, overflowY: "auto", padding: "18px 16px 96px" }}>
           {tab === "pending" && <Pending T={T} bookings={bookings} blocked={blocked} gBlocked={gBlocked} conflictFor={conflictFor} onOpen={setDetail} onApprove={approve} onDecline={setConfirm} bookingLink={bookingLink} setupLink={setupLink} telegramConnected={telegramConnected} />}
           {tab === "calendar" && <Calendar T={T} bookings={bookings} blocked={blocked} gBlocked={gBlocked} toggleBlock={toggleBlock} onOpen={setDetail} startH={startH} endH={endH} />}
-          {tab === "bookings" && <Bookings T={T} bookings={bookings} onOpen={setDetail} />}
+          {tab === "bookings" && <Bookings T={T} bookings={bookings} onOpen={setDetail} sport={profile.sport} />}
         </div>
 
         {/* toast */}
@@ -1281,7 +1294,7 @@ export default function MatchUpCoach() {
         <ConfirmDecline T={T} booking={confirm} onClose={() => setConfirm(null)} onConfirm={() => doDecline(confirm.id)} />
         <SettingsSheet T={T} open={showSettings} onClose={() => setShowSettings(false)} onTheme={toggleTheme}
           rate={rate} startH={startH} endH={endH} onSave={saveSettings}
-          onLogout={logout} bookingLink={bookingLink} coachName={coachName} coachSlug={profile.slug} />
+          onLogout={logout} bookingLink={bookingLink} coachName={coachName} coachSport={profile.sport} coachSlug={profile.slug} />
         <NotifSheet T={T} open={showNotif} onClose={() => setShowNotif(false)} items={notifs} />
       </div>
     </div>
