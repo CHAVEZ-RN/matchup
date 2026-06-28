@@ -150,7 +150,9 @@ async function runTool(name, input, ctx) {
       }
       const blocked = (bl || []).map((x) => x.hour.slice(0, 5));
       const open = [];
-      for (let h = 6; h <= 21; h++) {
+      const lo = Number.isInteger(coach.start_hour) ? coach.start_hour : 6;
+      const hi = Number.isInteger(coach.end_hour) ? coach.end_hour : 21;
+      for (let h = lo; h <= hi; h++) {
         const t = `${String(h).padStart(2, "0")}:00`;
         if (!taken.includes(t) && !blocked.includes(t)) open.push(t);
       }
@@ -285,8 +287,10 @@ async function notifyClient(bookingId) {
 
 // Watch the DB: whenever a booking becomes upcoming/declined, tell the client.
 // This makes approvals work no matter where they happen (website, Telegram, DB).
+let watcherChannel = null;
 function startBookingWatcher() {
-  supabase
+  if (watcherChannel) { try { supabase.removeChannel(watcherChannel); } catch {} }
+  watcherChannel = supabase
     .channel("booking-status-watch")
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bookings" },
       async (payload) => {
@@ -296,7 +300,25 @@ function startBookingWatcher() {
           try { await notifyClient(b.id); } catch (e) { console.error("notifyClient (realtime) failed:", String(e)); }
         }
       })
-    .subscribe((status) => console.log("Booking watcher:", status));
+    .subscribe((status) => {
+      console.log("Booking watcher:", status);
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setTimeout(startBookingWatcher, 5000); // reconnect
+      }
+    });
+}
+
+// Safety net: every 12s, catch any approved/declined booking the realtime feed missed.
+function startNotifyPoller() {
+  setInterval(async () => {
+    try {
+      const { data } = await supabase.from("bookings")
+        .select("id").eq("notified", false).in("status", ["upcoming", "declined"]).limit(20);
+      for (const row of data || []) {
+        try { await notifyClient(row.id); } catch (e) { console.error("poller notify failed:", String(e)); }
+      }
+    } catch (e) { console.error("poller error:", String(e)); }
+  }, 12000);
 }
 
 /* ── routes ─────────────────────────────────────────── */
@@ -423,4 +445,5 @@ app.get("/", (_, res) => res.send("Machi is awake 🤖"));
 app.listen(PORT, () => {
   console.log(`Machi listening on :${PORT}`);
   startBookingWatcher();
+  startNotifyPoller();
 });
