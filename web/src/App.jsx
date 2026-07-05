@@ -174,9 +174,10 @@ function Avatar({ name, size = 38 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: 99, flexShrink: 0,
-      background: c + "22", color: c, display: "flex", alignItems: "center",
-      justifyContent: "center", fontWeight: 700, fontSize: size * 0.36,
-      fontFamily: "Inter, sans-serif",
+      background: c + "1F", color: c, display: "flex", alignItems: "center",
+      justifyContent: "center", fontWeight: 600, fontSize: size * 0.38,
+      fontFamily: "'Space Grotesk', Inter, sans-serif", letterSpacing: "-0.02em",
+      boxShadow: `inset 0 0 0 1.5px ${c}3A`,
     }}>{initials(name)}</div>
   );
 }
@@ -378,9 +379,6 @@ function AuthScreen({ T, onTheme }) {
 
       {/* hero side */}
       <div className="mu-hero" style={{ flex: 1, background: T.card, borderLeft: `1px solid ${T.line}`, display: "flex", flexDirection: "column", justifyContent: "center", padding: 48, position: "relative" }}>
-        <button onClick={onTheme} className="mu-tap" style={{ position: "absolute", top: 22, right: 22, background: T.soft, border: `1px solid ${T.line}`, borderRadius: 99, padding: 9, color: T.text2, cursor: "pointer" }}>
-          {T.name === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
         <div style={{ maxWidth: 360 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: T.activeBg, color: T.active, padding: "6px 12px", borderRadius: 99, fontSize: 12, fontWeight: 600 }}>
             <span style={{ width: 6, height: 6, borderRadius: 99, background: T.activeDot }} /> Booking on autopilot for coaches
@@ -505,8 +503,8 @@ function Pending({ T, bookings, blocked, gBlocked, conflictFor, onOpen, onApprov
       </p>
       {pend.length === 0 && (
         <div style={{ border: `1px dashed ${T.line2}`, borderRadius: 16, padding: 34, textAlign: "center" }}>
-          <CheckCircle2 size={30} style={{ color: T.success }} />
-          <div style={{ color: T.text, fontWeight: 600, fontSize: 15, marginTop: 10 }}>All caught up, Coach!</div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}><MachiMark size={44} /></div>
+          <div style={{ color: T.text, fontWeight: 600, fontSize: 15 }}>All caught up, Coach!</div>
           <div style={{ color: T.dim, fontSize: 13, marginTop: 4 }}>Machi is watching your Telegram. New requests land here.</div>
         </div>
       )}
@@ -777,7 +775,7 @@ function Bookings({ T, bookings, onOpen, sport = "Coach" }) {
             background: T.card, border: `1px solid ${T.line}`, borderRadius: 14, padding: 13, marginBottom: 10,
             opacity: past ? 0.92 : 1, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", boxShadow: T.shadow,
           }}>
-            <Avatar name={b.client} />
+            <Avatar name={b.client} size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ color: T.text, fontWeight: 600, fontSize: 14.5 }}>{b.client}</div>
               <div className="mu-num" style={{ color: T.dim, fontSize: 12, marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
@@ -786,7 +784,9 @@ function Bookings({ T, bookings, onOpen, sport = "Coach" }) {
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
               <Badge T={T} status={b.status} />
-              <span style={{ color: T.dim, fontSize: 10 }}>via {b.via}</span>
+              <span style={{ color: T.dim, fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}>
+                {b.via === "Machi" && <MachiMark size={12} />} via {b.via}
+              </span>
             </div>
             <ChevronRight size={16} style={{ color: T.dim, flexShrink: 0 }} />
           </div>
@@ -959,11 +959,7 @@ function SettingsSheet({ T, open, onClose, onTheme, rate, startH, endH, onSave, 
         </button>
       </Block>
 
-      <Block icon={T.name === "dark" ? Sun : Moon} title="Appearance" sub={T.name === "dark" ? "Dark (gold)" : "Light"}>
-        <button onClick={onTheme} className="mu-tap" style={{ background: T.soft, border: `1px solid ${T.line2}`, color: T.text, borderRadius: 99, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          Switch to {T.name === "dark" ? "light" : "dark"}
-        </button>
-      </Block>
+
 
       <button onClick={() => { onSave({ rate: r, startH: s, endH: e, name: nm.trim(), sport: sp.trim() }); onClose(); }} disabled={!changed} className="mu-tap"
         style={{ width: "100%", marginTop: 16, background: changed ? T.primary : T.soft, color: changed ? T.primaryInk : T.dim,
@@ -1013,9 +1009,8 @@ function NotifSheet({ T, open, onClose, items }) {
 
 /* ----------------------- APP SHELL ----------------------- */
 export default function MatchUpCoach() {
-  const [themeName, setThemeName] = useState("dark");
-  const T = THEMES[themeName];
-  const toggleTheme = () => setThemeName((n) => (n === "light" ? "dark" : "light"));
+  const T = THEMES.dark;
+  const toggleTheme = () => {};
 
   // ---- auth + profile ----
   const [session, setSession] = useState(null);
@@ -1268,14 +1263,14 @@ export default function MatchUpCoach() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
             {telegramConnected ? (
               <>
-                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.success, background: T.activeBg, padding: "4px 10px", borderRadius: 99 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 99, background: T.activeDot, animation: "mu-pulse 1.8s infinite" }} /> Machi online
+                <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: T.success, background: T.activeBg, padding: "4px 10px 4px 5px", borderRadius: 99 }}>
+                  <MachiMark size={17} /> Machi online
                 </span>
                 <span style={{ color: T.dim, fontSize: 11 }}>watching your Telegram</span>
               </>
             ) : (
-              <a href={setupLink} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: T.pending, background: T.pendingBg || T.soft, padding: "4px 10px", borderRadius: 99, textDecoration: "none" }}>
-                <span style={{ width: 6, height: 6, borderRadius: 99, background: T.pendingDot }} /> Connect your Telegram →
+              <a href={setupLink} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: T.pending, background: T.pendingBg || T.soft, padding: "4px 11px 4px 5px", borderRadius: 99, textDecoration: "none" }}>
+                <MachiMark size={17} /> Connect your Telegram →
               </a>
             )}
           </div>
