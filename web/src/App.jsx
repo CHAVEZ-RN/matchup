@@ -218,14 +218,26 @@ function Sheet({ T, open, onClose, children }) {
 function Brand({ T, size = 56 }) {
   return (
     <div style={{
-      width: size, height: size, borderRadius: 16, flexShrink: 0,
-      background: "#1B1E24", display: "flex", alignItems: "center", justifyContent: "center",
-      boxShadow: T.shadow, border: T.name === "dark" ? "1px solid #2E333C" : "none",
+      width: size, height: size, borderRadius: size * 0.28, flexShrink: 0,
+      background: "#A6E22E", display: "flex", alignItems: "center", justifyContent: "center",
+      boxShadow: T.shadow,
     }}>
-      <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none">
-        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 3.5V16H5.5A1.5 1.5 0 0 1 4 14.5v-9Z"
-          fill="#FFFFFF" opacity="0.96" />
-        <path d="M8.5 10.2l2.3 2.3 4.7-4.7" stroke="#A6E22E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+        <path d="M13 47 L23 19 L32 40 L41 19 L51 47" fill="none" stroke="#16181D"
+          strokeWidth="8.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
+function MachiMark({ size = 40 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: size * 0.28, flexShrink: 0, background: "#A6E22E", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+        <path d="M17 21 h30 a5 5 0 0 1 5 5 v13 a5 5 0 0 1 -5 5 h-15 l-9 6.5 v-6.5 h-6 a5 5 0 0 1 -5 -5 v-13 a5 5 0 0 1 5 -5 z" fill="#16181D" />
+        <circle cx="26.5" cy="32" r="3.1" fill="#A6E22E" />
+        <circle cx="37.5" cy="32" r="3.1" fill="#A6E22E" />
+        <path d="M27 38.5 Q32 41.5 37 38.5" fill="none" stroke="#A6E22E" strokeWidth="2.6" strokeLinecap="round" />
       </svg>
     </div>
   );
