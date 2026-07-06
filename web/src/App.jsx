@@ -170,14 +170,14 @@ const overlaps = (a, b) => {
 
 /* ----------------------- SMALL PARTS ----------------------- */
 function Avatar({ name, size = 38 }) {
-  const c = avColor(name);
+  // Single brand color for all clients — consistent, premium, on-brand.
   return (
     <div style={{
       width: size, height: size, borderRadius: 99, flexShrink: 0,
-      background: c + "1F", color: c, display: "flex", alignItems: "center",
+      background: "#A6E22E1F", color: "#A6E22E", display: "flex", alignItems: "center",
       justifyContent: "center", fontWeight: 600, fontSize: size * 0.38,
       fontFamily: "'Space Grotesk', Inter, sans-serif", letterSpacing: "-0.02em",
-      boxShadow: `inset 0 0 0 1.5px ${c}3A`,
+      boxShadow: "inset 0 0 0 1.5px #A6E22E3A",
     }}>{initials(name)}</div>
   );
 }
@@ -323,7 +323,9 @@ function AuthScreen({ T, onTheme }) {
             <Brand T={T} size={48} />
             <div>
               <h1 className="mu-display" style={{ color: T.text, fontSize: 26, margin: 0, lineHeight: 1 }}>MatchUp</h1>
-              <p style={{ color: T.dim, fontSize: 12, margin: "4px 0 0" }}>powered by Machi 🤖</p>
+              <p style={{ color: T.dim, fontSize: 12, margin: "5px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
+                powered by <MachiMark size={16} /> Machi
+              </p>
             </div>
           </div>
           <h2 className="mu-display" style={{ color: T.text, fontSize: 22, margin: "0 0 6px", lineHeight: 1.25 }}>
@@ -445,7 +447,7 @@ function PendingCard({ T, b, conflict, onOpen, onApprove, onDecline }) {
       )}
       <div style={{ display: "flex", gap: 9, marginTop: 13 }} onClick={(e) => e.stopPropagation()}>
         <button onClick={onDecline} className="mu-tap" style={{
-          flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.text2,
+          flex: 1, background: "transparent", border: `1px solid ${T.text2}66`, color: T.text,
           borderRadius: 11, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
         }}>
@@ -846,7 +848,7 @@ function DetailSheet({ T, booking, suggestion, rate = COACH.rate, onClose, onApp
 
       <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
         {b.status === "pending" && (<>
-          <button onClick={() => onDecline(b)} className="mu-tap" style={{ flex: 1, background: "transparent", border: `1px solid ${T.line2}`, color: T.text2, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><X size={16} /> Decline</button>
+          <button onClick={() => onDecline(b)} className="mu-tap" style={{ flex: 1, background: "transparent", border: `1px solid ${T.text2}66`, color: T.text, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><X size={16} /> Decline</button>
           <button onClick={() => { onApprove(b.id); onClose(); }} className="mu-tap" style={{ flex: 1.4, background: T.accent, border: "none", color: T.accentInk, borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={16} /> Approve</button>
         </>)}
         {(b.status === "upcoming" || b.status === "active") && (<>
