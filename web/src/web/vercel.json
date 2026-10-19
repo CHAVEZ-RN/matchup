@@ -1,7 +1,6 @@
 {
   "rewrites": [
-    { "source": "/book/:slug", "destination": "/index.html" },
-    { "source": "/book/:slug/(.*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     { "source": "/(.*)", "headers": [
