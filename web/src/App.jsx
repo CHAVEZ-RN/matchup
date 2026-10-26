@@ -469,29 +469,29 @@ function Wizard({ profile, onDone }) {
             <p style={{ color: T.fg2, fontSize: 15, margin: "0 0 22px", lineHeight: 1.5 }}>Add what customers can book. Prices in pesos.</p>
 
             {services.map((s, i) => (
-              <div key={i} style={{ background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <div key={i} style={{ background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
                   <input value={s.name} onChange={e => setServices(arr => arr.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                    style={{ background: "transparent", border: "none", color: T.fg, fontSize: 14, fontWeight: 600, width: "100%", padding: 0, outline: "none" }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                    <input type="number" step="0.5" value={s.duration_hours} onChange={e => setServices(arr => arr.map((x, j) => j === i ? { ...x, duration_hours: parseFloat(e.target.value)||1 } : x))} style={{ width: 50, background: T.ink, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "2px 6px", color: T.fg2, fontSize: 12 }} />
+                    style={{ background: "transparent", border: "none", color: T.fg, fontSize: 14, fontWeight: 600, width: "100%", padding: 0, outline: "none", boxSizing: "border-box" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5 }}>
+                    <input type="text" inputMode="decimal" value={s.duration_hours} onChange={e => setServices(arr => arr.map((x, j) => j === i ? { ...x, duration_hours: parseFloat(e.target.value)||1 } : x))} style={{ width: 44, background: T.ink, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "3px 6px", color: T.fg2, fontSize: 12, boxSizing: "border-box", MozAppearance: "textfield" }} />
                     <span style={{ color: T.mute, fontSize: 12 }}>hr</span>
-                    <span style={{ color: T.line2 }}>·</span>
+                    <span style={{ color: T.line2, fontSize: 12 }}>·</span>
                     <span style={{ color: T.mute, fontSize: 12 }}>₱</span>
-                    <input type="number" value={s.price} onChange={e => setServices(arr => arr.map((x, j) => j === i ? { ...x, price: parseInt(e.target.value)||0 } : x))} style={{ width: 70, background: T.ink, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "2px 6px", color: T.fg2, fontSize: 12 }} />
+                    <input type="text" inputMode="numeric" value={s.price} onChange={e => setServices(arr => arr.map((x, j) => j === i ? { ...x, price: parseInt(e.target.value)||0 } : x))} style={{ width: 62, background: T.ink, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "3px 6px", color: T.fg2, fontSize: 12, boxSizing: "border-box", MozAppearance: "textfield" }} />
                   </div>
                 </div>
-                <button onClick={() => removeSvc(i)} className="m-tap" style={{ background: "transparent", border: "none", color: T.mute, cursor: "pointer", padding: 8 }}><Trash2 size={16} /></button>
+                <button onClick={() => removeSvc(i)} className="m-tap" aria-label="Remove" style={{ flexShrink: 0, background: "transparent", border: "none", color: T.mute, cursor: "pointer", padding: 6 }}><Trash2 size={16} /></button>
               </div>
             ))}
 
             {/* add new */}
             <div style={{ marginTop: 12, padding: 12, background: T.ink, border: `1px dashed ${T.line2}`, borderRadius: 12 }}>
               <input value={newSvc.n} onChange={e => setNewSvc({...newSvc, n: e.target.value})} placeholder="Service name" style={{ width: "100%", background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 8, padding: "8px 10px", color: T.fg, fontSize: 14, marginBottom: 8 }} />
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="number" step="0.5" value={newSvc.d} onChange={e => setNewSvc({...newSvc, d: e.target.value})} placeholder="1" style={{ flex: 1, background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 8, padding: "8px 10px", color: T.fg, fontSize: 14 }} />
-                <input type="number" value={newSvc.p} onChange={e => setNewSvc({...newSvc, p: e.target.value})} placeholder="₱ price" style={{ flex: 1, background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 8, padding: "8px 10px", color: T.fg, fontSize: 14 }} />
-                <button onClick={addSvc} className="m-tap" style={{ background: T.lime, color: T.limeInk, border: "none", borderRadius: 8, padding: "0 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Plus size={14} /></button>
+              <div style={{ display: "flex", gap: 6, overflow: "hidden" }}>
+                <input type="text" inputMode="decimal" value={newSvc.d} onChange={e => setNewSvc({...newSvc, d: e.target.value})} placeholder="1" style={{ flex: 1, minWidth: 0, background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 8, padding: "8px 10px", color: T.fg, fontSize: 14, boxSizing: "border-box" }} />
+                <input type="text" inputMode="numeric" value={newSvc.p} onChange={e => setNewSvc({...newSvc, p: e.target.value})} placeholder="₱ price" style={{ flex: 1, minWidth: 0, background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 8, padding: "8px 10px", color: T.fg, fontSize: 14, boxSizing: "border-box" }} />
+                <button onClick={addSvc} className="m-tap" aria-label="Add" style={{ flexShrink: 0, background: T.lime, color: T.limeInk, border: "none", borderRadius: 8, padding: "0 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Plus size={14} /></button>
               </div>
             </div>
           </div>
@@ -642,10 +642,10 @@ function QRPage({ profile, onBack }) {
           {qrDataUrl ? (
             <>
               <img src={qrDataUrl} alt="QR code" style={{ width: "100%", maxWidth: 260, display: "block" }} />
-              {/* M mark centered on top of QR */}
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: "#FFFFFF", padding: 6, borderRadius: 10 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 10, background: T.lime, display: "grid", placeItems: "center" }}>
-                  <svg width="42" height="42" viewBox="0 0 64 64"><path d="M13 47 L23 19 L32 40 L41 19 L51 47" fill="none" stroke={T.limeInk} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              {/* M mark centered — smaller for better scan reliability */}
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: "#FFFFFF", padding: 5, borderRadius: 8 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: T.lime, display: "grid", placeItems: "center" }}>
+                  <svg width="32" height="32" viewBox="0 0 64 64"><path d="M13 47 L23 19 L32 40 L41 19 L51 47" fill="none" stroke={T.limeInk} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </div>
               </div>
             </>
@@ -654,13 +654,28 @@ function QRPage({ profile, onBack }) {
           )}
         </div>
 
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div className="m-h" style={{ fontSize: 20, marginBottom: 4 }}>{profile.name}</div>
-          <div className="m-num" style={{ color: T.mute, fontSize: 11, wordBreak: "break-all" }}>{url}</div>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div className="m-h" style={{ fontSize: 20, marginBottom: 10 }}>{profile.name}</div>
         </div>
-        <Btn kind="primary" size="lg" onClick={download} disabled={!qrDataUrl} style={{ width: "100%" }}>
+        {/* URL field with copy inline — proves what the QR encodes */}
+        <div style={{ display: "flex", alignItems: "stretch", background: T.ink2, border: `1px solid ${T.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
+          <div className="m-num" style={{ flex: 1, padding: "11px 13px", color: T.fg2, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center" }}>{url}</div>
+          <button onClick={copy} aria-label={copied ? "Copied" : "Copy link"} className="m-tap"
+            style={{ background: copied ? T.lime : "transparent", color: copied ? T.limeInk : T.fg2, border: "none", borderLeft: `1px solid ${T.line}`, padding: "0 14px", cursor: "pointer", display: "flex", alignItems: "center" }}>
+            {copied ? <Check size={16} strokeWidth={2.6} /> : <Link2 size={16} />}
+          </button>
+        </div>
+        <Btn kind="primary" size="lg" onClick={download} disabled={!qrDataUrl} style={{ width: "100%", marginBottom: 8 }}>
           <Download size={16} /> Download QR code
         </Btn>
+        {/* Open the booking page in a new tab — tap-test same URL as QR */}
+        <a href={url} target="_blank" rel="noreferrer" className="m-tap"
+          style={{ display: "block", textAlign: "center", background: "transparent", color: T.fg2, border: `1px solid ${T.line}`, borderRadius: 12, padding: "12px 16px", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+          Preview booking page →
+        </a>
+        <p style={{ color: T.mute, fontSize: 11, textAlign: "center", marginTop: 14, lineHeight: 1.5 }}>
+          Both the QR code and the link above open the same booking page.
+        </p>
       </div>
     </div>
   );
@@ -1126,9 +1141,9 @@ function SettingsSheet({ open, onClose, profile, services, onSave, onSaveService
           <div style={{ flex: 1, minWidth: 0 }}>
             <input value={s.name} onChange={e => editSvc(i, "name", e.target.value)} style={{ background: "transparent", border: "none", color: T.fg, fontSize: 14, fontWeight: 600, width: "100%", padding: 0, outline: "none" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-              <input type="number" step="0.5" value={s.duration_hours} onChange={e => editSvc(i, "duration_hours", parseFloat(e.target.value)||1)} style={{ width: 50, background: T.ink2, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "2px 6px", color: T.fg2, fontSize: 12 }} />
+              <input type="text" inputMode="decimal" value={s.duration_hours} onChange={e => editSvc(i, "duration_hours", parseFloat(e.target.value)||1)} style={{ width: 44, background: T.ink2, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "3px 6px", color: T.fg2, fontSize: 12, boxSizing: "border-box", MozAppearance: "textfield" }} />
               <span style={{ color: T.mute, fontSize: 12 }}>hr · ₱</span>
-              <input type="number" value={s.price} onChange={e => editSvc(i, "price", parseInt(e.target.value)||0)} style={{ width: 70, background: T.ink2, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "2px 6px", color: T.fg2, fontSize: 12 }} />
+              <input type="text" inputMode="numeric" value={s.price} onChange={e => editSvc(i, "price", parseInt(e.target.value)||0)} style={{ width: 62, background: T.ink2, border: `1px solid ${T.line2}`, borderRadius: 6, padding: "3px 6px", color: T.fg2, fontSize: 12, boxSizing: "border-box", MozAppearance: "textfield" }} />
             </div>
           </div>
           <button onClick={() => rmSvc(i)} className="m-tap" style={{ background: "transparent", border: "none", color: T.mute, cursor: "pointer", padding: 8 }}><Trash2 size={14} /></button>
